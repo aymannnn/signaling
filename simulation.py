@@ -29,7 +29,7 @@ from collections import deque
 import sys
 
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
-DEBUG = True
+DEBUG = False
 constants = pd.read_csv("constants.csv") if not DEBUG else pd.read_csv(
     "constants_debug_profile.csv")
 
@@ -121,6 +121,17 @@ class Applicant:
     application numbers that are not divisible by 4.
 
     Applicant is the class defined above.
+    
+    NOTE: there is a potential problem which is when there are not enough
+    programs in a quartile to satisfy the application needs of an applicant.
+    
+    For example, with the 50/25/25 rule, there is a chance to sample 75%
+    of programs within your own quartile (1st or last).
+    
+    If there are no programs left in quartile, currently we just exit ...
+    if less then what you want just pick all of them remaining
+    
+    Can also just sample other quartiles if needed
     '''
         applications = []
         length = Applicant.n_signals if signals else Applicant.n_non_signals
@@ -142,6 +153,35 @@ class Applicant:
             # filter out chosen-programs
             available = [
                 p for p in program_choices if p not in already_chosen_programs]
+            
+            # this only happens when not enough programs in quartile
+            # does NOT ever happen in base case scenario of general surgery
+            if len(available) < num:
+                needed = num - len(available)
+                all_program_ids = range(len(all_programs))
+                # Programs not yet chosen AND not already in `available`
+                other_available = [
+                    p for p in all_program_ids if (p not in already_chosen_programs) and (p not in available)]
+                
+                if other_available:
+                    np.random.shuffle(other_available)
+                    # this is safe, if needed is greater then list it will
+                    # just get max of list
+                    extra = other_available[0:needed]
+                    available.extend(extra)
+        
+            # If there are no programs left at all
+            if len(available) == 0:
+                return
+
+            # If there are fewer available programs than requested, 
+            # clamp to what we have
+            if len(available) < num:
+                # Optional
+                # print(f"Clamping from {num} to {len(available)} 
+                # in quartile {quartile} for applicant {self.id}")
+                num = len(available)
+            
             # now do a simple numpy pick without replacement
             choices = np.random.choice(available, size=num, replace=False)
             for choice in choices:
