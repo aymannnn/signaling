@@ -95,38 +95,28 @@ class Applicant:
         quartile_above = (self.quartile - 1) if self.quartile > 1 else self.quartile
         quartile_below = (self.quartile + 1) if self.quartile < 4 else self.quartile
         
+    
+        already_chosen_programs = set(
+            self.signaled_programs + self.non_signaled_programs)
+            
         def _add_to_application_list(num, quartile):
-            for _ in range(num):
-                program_choices = program_quartile_list[quartile]
-                attempts = 0
-                while True:
-                    attempts += 1
-                    if attempts > 1000:
-                        raise RuntimeError(
-                            f"Applicant {self.id}: Stuck in loop trying to pick from quartile {quartile}. "
-                            f"Already picked {len(applications)} programs: {applications}. " f"Need {num} from this quartile. Available: {len(program_choices)}")
-                    # I suppose this could break if you run out of programs but
-                    # that would mean > 80 applications per applicant in our scenario
-                    # will write it as a condition in docs
-                    choice = np.random.choice(program_choices) # picks program index/id
-                    # make sure that they don't double-choose a program
-                    # that they have already picked, either in 
-                    # signals or non-signals
-                    if (choice in applications) or (
-                        choice in self.signaled_programs) or (
-                        choice in self.non_signaled_programs
-                        ):
-                        # pick again, program already chosen
-                        continue
-                    else:
-                        applications.append(choice) # just need the index
-                        # add applicant to program's received signals/no signals
-                        if signals:
-                            all_programs[choice].received_signals.append(self.id) 
-                        else:
-                            all_programs[choice].received_no_signals.append(self.id)
-                        break
-        
+            # UPDATE: refactoring to avoid while loop
+            if num == 0:
+                return
+            program_choices = program_quartile_list[quartile]
+            # filter out chosen-programs
+            available = [
+                p for p in program_choices if p not in already_chosen_programs]
+            # now do a simple numpy pick without replacement
+            choices = np.random.choice(available, size=num, replace=False)
+            for choice in choices:
+                applications.append(choice)
+                already_chosen_programs.add(choice)
+                if signals:
+                    all_programs[choice].received_signals.append(self.id) 
+                else:
+                    all_programs[choice].received_no_signals.append(self.id)
+ 
         _add_to_application_list(divisions_of_4, quartile_above)
         _add_to_application_list(divisions_of_4, quartile_below)
         _add_to_application_list(2*divisions_of_4 + remainder, own_quartile)

@@ -3,7 +3,7 @@ n_programs,367,number of residency programs
 n_applicants,3300,number of resideny applicants
 spots_per_program,5,in 2025 about 1800 positions which is almost 5
 interviews_per_spot,12,how many interviews per spot on average
-simulations_per_s,10,number of simulations to run for every signal value checked
+simulations_per_s,5,number of simulations to run for every signal value checked
 max_applications,40,includes signaled + non-signaled applications
-study_min_signal,5,minimum number of signals to study
-study_max_signal,20,maximum number of signals to study
+study_min_signal,7,minimum number of signals to study
+study_max_signal,14,maximum number of signals to study

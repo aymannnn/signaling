@@ -1,0 +1,10 @@
+# just run
+python -m cProfile -s tottime simulation.py
+
+# save to file
+python -m cProfile -o profile.out simulation.py
+python -m pstats profile.out
+sort tottime
+stats 20
+
+
