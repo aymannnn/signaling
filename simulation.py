@@ -24,8 +24,11 @@ go to their own quartile.
 
 import numpy as np
 import pandas as pd
+import os
 from collections import deque
+import sys
 
+USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
 DEBUG = True
 constants = pd.read_csv("constants.csv") if not DEBUG else pd.read_csv(
     "constants_debug_profile.csv")
@@ -42,8 +45,39 @@ def print_constants():
     print(f"Maximum applications per applicant: {CONSTANTS['max_applications']}")
     print(f"Simulations per signal value: {CONSTANTS['simulations_per_s']}")
     print(f"Studying signal values from {CONSTANTS['study_min_signal']} to {CONSTANTS['study_max_signal']}\n")
+    
+
+def _simulate_for_signal(signal_value: int, seed: int | None = None):
+    """
+    Pure worker - does NOT depend on globally mutable state.
+    Single simulation run for a given signal_value.
+    Did move applicant.update_signal_number inside so that each process
+    is self-contained.
+    
+    It's actually real important to give them a random seed here because
+    there can be a risk with parallelizaition that multiple processes
+    get the same random seed and thus produce correlated results.
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    Applicant.update_signal_number(signal_value)
+    app, spot, review = run_simulation(signal_value)
+    return app, spot, review
 
 class Applicant:
+
+    # add slots to prevent memory with __dict__ and many instances of
+    # applicant and program
+    __slots__ = (
+        "id",
+        "quartile",
+        "matched_program",
+        "signaled_programs",
+        "non_signaled_programs",
+        "final_rank_list",
+    )
+
     n_applications = CONSTANTS['max_applications']
     n_applicants = CONSTANTS['n_applicants']
     n_signals = int(-1) # placeholder
@@ -152,6 +186,18 @@ class Applicant:
         )
 
 class Program:
+    # again, use slots to save memory and prevent __dict__ creation
+    __slots__ = (
+        "id",
+        "quartile",
+        "received_signals",
+        "received_no_signals",
+        "reviewed_applications",
+        "final_rank_list",
+        "tentative_matches",
+        "rank_index",    # added in stable_match
+    )
+    
     spots_per_program = CONSTANTS['spots_per_program']
     num_interviews = (
         CONSTANTS['interviews_per_spot']*CONSTANTS['spots_per_program'])
@@ -219,6 +265,7 @@ def get_quartile_dict(n) -> dict:
         4: [i for i in range(int(quartile_size*3), n)]
     }
     return quartiles
+
 
 
 def stable_match(applicants: list, programs: list):
@@ -342,27 +389,87 @@ def run_simulation(s):
 
 if __name__ == "__main__":
     print_constants()
-    
-    signal_range = [str(i) for i in range(CONSTANTS['study_min_signal'], 
-                                          CONSTANTS['study_max_signal'] + 1)]
+
+    signal_values = list(range(
+        CONSTANTS['study_min_signal'],
+        CONSTANTS['study_max_signal'] + 1
+    ))
+    signal_range = [str(v) for v in signal_values]
+
     final_dataframe = pd.DataFrame(columns=['Parameter'] + signal_range)
-    
-    for i in range(CONSTANTS['simulations_per_s']):
-        print(f"Starting simulation batch {i+1} of {CONSTANTS['simulations_per_s']}")
-        unmatched_applicants = ['Unmatched_Applicants']
-        unfilled_spots = ['Unfilled_Spots']
-        reviews_per_program = ['Reviews_Per_Program']
-        for signal_value in range(CONSTANTS['study_min_signal'], 
-                                  CONSTANTS['study_max_signal'] + 1):
-            Applicant.update_signal_number(signal_value)
-            app, spot, review = run_simulation(signal_value)
-            unmatched_applicants.append(app)
-            unfilled_spots.append(spot)
-            reviews_per_program.append(review)
-        # Append results to final dataframe
-        final_dataframe.loc[len(final_dataframe)] = unmatched_applicants
-        final_dataframe.loc[len(final_dataframe)] = unfilled_spots
-        final_dataframe.loc[len(final_dataframe)] = reviews_per_program
-    
-    # Export combined results
+
+    print('Number of cores:', os.cpu_count())
+
+    if USE_PARALLEL:
+        # -------- PARALLEL VERSION (normal fast run) --------
+        from concurrent.futures import ProcessPoolExecutor
+
+        # One process pool reused across all batches
+        with ProcessPoolExecutor() as executor:
+            for i in range(CONSTANTS['simulations_per_s']):
+                print(
+                    f"Starting simulation batch {i+1} of "
+                    f"{CONSTANTS['simulations_per_s']}"
+                )
+
+                # Give each (batch, signal_value) combo its own seed to
+                # avoid accidental correlation between runs
+                seeds = np.random.randint(
+                    0, 2**32 - 1, size=len(signal_values), dtype=np.uint64
+                )
+
+                # Run this batch in parallel across signal values
+                # each call to simulate for run_simulation(s) is independent
+                # embarrassingly parallel in my research ... very rude name
+                # pickles simulate for signal and sends payload to
+                # idle worker process -> returns future object
+                # each worker does the job and returns results
+                futures = [
+                    executor.submit(_simulate_for_signal, s_val, int(seed))
+                    for s_val, seed in zip(signal_values, seeds)
+                ]
+
+                # Collect results (same order as signal_values)
+                results = [f.result() for f in futures]
+
+                # Rebuild rows in the same order as the original code
+                unmatched_applicants = ['Unmatched_Applicants']
+                unfilled_spots = ['Unfilled_Spots']
+                reviews_per_program = ['Reviews_Per_Program']
+
+                for (app, spot, review) in results:
+                    unmatched_applicants.append(app)
+                    unfilled_spots.append(spot)
+                    reviews_per_program.append(review)
+
+                final_dataframe.loc[len(final_dataframe)
+                                    ] = unmatched_applicants
+                final_dataframe.loc[len(final_dataframe)] = unfilled_spots
+                final_dataframe.loc[len(final_dataframe)] = reviews_per_program
+
+    else:
+        # -------- SERIAL VERSION (for cProfile / debugging) --------
+        for i in range(CONSTANTS['simulations_per_s']):
+            print(
+                f"Starting simulation batch {i+1} of "
+                f"{CONSTANTS['simulations_per_s']} (serial mode)"
+            )
+
+            unmatched_applicants = ['Unmatched_Applicants']
+            unfilled_spots = ['Unfilled_Spots']
+            reviews_per_program = ['Reviews_Per_Program']
+
+            # In serial mode we just call the same worker directly,
+            # without any multiprocessing.
+            for s_val in signal_values:
+                app, spot, review = _simulate_for_signal(s_val, seed=None)
+                unmatched_applicants.append(app)
+                unfilled_spots.append(spot)
+                reviews_per_program.append(review)
+
+            final_dataframe.loc[len(final_dataframe)] = unmatched_applicants
+            final_dataframe.loc[len(final_dataframe)] = unfilled_spots
+            final_dataframe.loc[len(final_dataframe)] = reviews_per_program
+
+    # Same output as before
     final_dataframe.to_csv('simulation_results.csv', index=False)

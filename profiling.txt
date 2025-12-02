@@ -2,7 +2,7 @@
 python -m cProfile -s tottime simulation.py
 
 # save to file
-python -m cProfile -o profile.out simulation.py
+python -m cProfile -o profile.out simulation.py --no-parallel
 python -m pstats profile.out
 sort tottime
 stats 20
