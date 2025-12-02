@@ -24,6 +24,7 @@ go to their own quartile.
 
 import numpy as np
 import pandas as pd
+from collections import deque
 
 DEBUG = True
 constants = pd.read_csv("constants.csv") if not DEBUG else pd.read_csv(
@@ -219,8 +220,9 @@ def get_quartile_dict(n) -> dict:
     }
     return quartiles
 
+
 def stable_match(applicants: list, programs: list):
-    '''
+    """
     Implements the applicant-proposing deferred acceptance algorithm (NRMP style).
     
     Applicants propose to programs in order of their final_rank_list.
@@ -228,76 +230,78 @@ def stable_match(applicants: list, programs: list):
     up to their capacity, rejecting others.
     
     The algorithm terminates when no applicant has a program left to propose to.
-    '''
-    # Initialize tracking structures
-    free_applicants = set(range(len(applicants)))
-    # Track next program to propose to for each applicant
-    # starting index is 0, checks first program on applicant final rank list
-    # maximum index is len(final_rank_list) - 1 which = (max applications -1)
-    next_proposal_index = {i: 0 for i in range(len(applicants))}
+    
+    Compared to last push, this version just precomputes program rankings
+    and uses a queue for free applicants for speed.
+    """
+
+    # Precompute constant-time rank lookups for each program
+    # used later to see if applicant is in the PROGRAM's rank list, fast lookup
+    # with dictionary
+    for program in programs:
+        # app_id -> position in final_rank_list
+        program.rank_index = {
+            app_id: pos for pos, app_id in enumerate(program.final_rank_list)
+        }
+        # Ensure tentative_matches is empty at the start
+        program.tentative_matches = []
+
+    n_applicants = len(applicants)
+    # deque for O(1) pops from left which we use often here
+    free_applicants = deque(range(n_applicants))
+    
+    # Simple list, last time was dict this will be faster
+    next_proposal_index = [0] * n_applicants
 
     while free_applicants:
-        # Get an applicant who hasn't been matched and has programs left to propose to
-        applicant_id = None
-        for app_id in free_applicants:
-            if next_proposal_index[app_id] < len(applicants[app_id].final_rank_list):
-                applicant_id = app_id
-                break
-
-        if applicant_id is None:
-            # No more proposals possible
-            # All free applicants have exhausted their rank lists, end function
-            break
-
+        # fast pop for applicant ID to propose
+        applicant_id = free_applicants.popleft()
         applicant = applicants[applicant_id]
 
-        # Get next program on applicant's rank list
+        # If no programs left to propose to, they remain unmatched
+        # already popped from free applicants
+        if next_proposal_index[applicant_id] >= len(applicant.final_rank_list):
+            continue
+
+        # Next program on this applicant's list
         program_id = applicant.final_rank_list[next_proposal_index[applicant_id]]
         next_proposal_index[applicant_id] += 1
         program = programs[program_id]
-        
-        if applicant_id not in program.final_rank_list:
-            # Program does not consider this applicant
-            # don't need to do anything, applicant remains in free_applicants
+
+        # Program does not rank this applicant -> effectively immediate rejection,
+        # applicant will try again next time with the NEXT program
+        if applicant_id not in program.rank_index:
+            # remember to add back into free applicants
+            free_applicants.append(applicant_id)
             continue
 
         # Program considers the proposal
         program.tentative_matches.append(applicant_id)
-        
-        # return the INDEX position of APP ID in the PROGRAMS final rank list
-        # and sort based on THAT key
-        # remember program and applicant rank lists prioritize signals first
-        # so it's not always in order of index
+
+        # Sort by program’s preference
         program.tentative_matches.sort(
-            key = lambda app_id: program.final_rank_list.index(app_id))
-                
-        # Keep only spots_per_program applicants
+            key=lambda aid: program.rank_index[aid]
+        )
+
+        # Keep only best spots_per_program applicants if over capacity
+        # program always prefers best applicants
         if len(program.tentative_matches) > program.spots_per_program:
             rejected = program.tentative_matches[program.spots_per_program:]
             program.tentative_matches = program.tentative_matches[:program.spots_per_program]
 
             # Rejected applicants become free again
-            for rejected_id in rejected:
-                # remember it is a set so it doesn't matter if we add
-                # the applicant back to it
-                free_applicants.add(rejected_id)
-            
-            if applicant_id in program.tentative_matches:
-                # remember that remove raises a key error if not in set
-                # discard will not ... but I want a key error if 
-                # this somehow removes someone that wasn't in it
-                free_applicants.remove(applicant_id)
-            
-        else:
-            # Applicant was accepted (tentatively)
-            free_applicants.remove(applicant_id)
+            for rej in rejected:
+                free_applicants.append(rej)
 
-    # Finalize matches
+        # If the applicant is among program.tentative_matches, they are tentatively matched
+        # and will only re-enter free_applicants if they are later rejected.
+
+    # Finalize matches exactly as before
     for program in programs:
         for app_id in program.tentative_matches:
             applicants[app_id].matched_program = program.id
-    return applicants, programs
 
+    return applicants, programs
 
 def count_unmatched(applicants: list, programs: list):
     '''
