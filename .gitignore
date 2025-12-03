@@ -1,1 +1,4 @@
 *.out
+*.github
+*.vscode
+__pycache__/
