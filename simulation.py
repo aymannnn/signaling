@@ -30,12 +30,27 @@ import sys
 
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
 DEBUG = False
-constants = pd.read_csv("constants.csv") if not DEBUG else pd.read_csv(
+constants = pd.read_csv("constants_base_case_randomized.csv") if not DEBUG else pd.read_csv(
     "constants_debug_profile.csv")
 
 constants = constants.drop(columns=['Description'])
+constants = constants.drop(columns=['Type'])
+result_print_prefix = constants.loc[
+    constants['Variable'] == 'result_file_prefix', 'Value'].values[0]
+
+RANDOMIZE_PICK = constants.loc[
+    constants['Variable'] == 'completely_randomize_program_pick', 'Value'].values[0
+]
+RANDOMIZE_PICK = bool(RANDOMIZE_PICK)
+
+drop_constants = [
+    'result_file_prefix',
+    'completely_randomize_program_pick'
+]
+
+constants = constants[constants['Variable'] != 'result_file_prefix']
 CONSTANTS = constants.set_index(
-    'Variable')['Value (Must be INTEGERS)'].astype(int).to_dict()
+    'Variable')['Value'].astype(int).to_dict()
 
 def print_constants():
     print("In this simulation, we will be running:\n")
@@ -99,11 +114,33 @@ class Applicant:
             return 3
         else:
             return 4
+    
+    def _completely_random_pick(
+        self, all_programs: list, length: int, signals: bool):
+        applications = []
+        already_chosen_programs = set(
+            self.signaled_programs + self.non_signaled_programs)
+        available_programs = [p.id for p in all_programs
+                              if p.id not in already_chosen_programs]
+        if length > len(available_programs):
+            print(f"Warning: Applicant {self.id} requested {length} applications but only {len(available_programs)} available. This will only occur in extreme edge cases where n programs < n applications")
+        choices = np.random.choice(
+            available_programs, size=length, replace=False)
+        for choice in choices:
+            applications.append(choice)
+            # add applicant to programs received applications
+            if signals:
+                all_programs[choice].received_signals.append(self.id)
+            else:
+                all_programs[choice].received_no_signals.append(self.id
+        )
+        return applications
         
     def pick_programs(self, 
                       all_programs: list, 
                       program_quartile_list: dict,
-                      signals: bool):
+                      signals: bool,
+                      completely_randomize: bool):
         '''
     The purpose of this function is to create the list of applications that
     each applicant will send. It will also update the respective program
@@ -133,6 +170,13 @@ class Applicant:
     
     Can also just sample other quartiles if needed
     '''
+        if completely_randomize:
+            return self._completely_random_pick(
+                all_programs,
+                Applicant.n_signals if signals else Applicant.n_non_signals,
+                signals
+            )
+            
         applications = []
         length = Applicant.n_signals if signals else Applicant.n_non_signals
         divisions_of_4 = length//4 # divisions of 4 go to quartiles
@@ -141,56 +185,83 @@ class Applicant:
         quartile_above = (self.quartile - 1) if self.quartile > 1 else self.quartile
         quartile_below = (self.quartile + 1) if self.quartile < 4 else self.quartile
         
+        # this creates a list of the quartiles sorted by their closeness to the applicant's quartile so that we can later step into quartiles by distance
+        quartiles_by_closeness = sorted(
+            program_quartile_list.keys(),
+            key=lambda q: abs(q - self.quartile))
+
     
         already_chosen_programs = set(
             self.signaled_programs + self.non_signaled_programs)
             
         def _add_to_application_list(num, quartile):
-            # UPDATE: refactoring to avoid while loop
-            if num == 0:
-                return
-            program_choices = program_quartile_list[quartile]
-            # filter out chosen-programs
-            available = [
-                p for p in program_choices if p not in already_chosen_programs]
-            
-            # this only happens when not enough programs in quartile
-            # does NOT ever happen in base case scenario of general surgery
-            if len(available) < num:
-                needed = num - len(available)
-                all_program_ids = range(len(all_programs))
-                # Programs not yet chosen AND not already in `available`
-                other_available = [
-                    p for p in all_program_ids if (p not in already_chosen_programs) and (p not in available)]
-                
-                if other_available:
-                    np.random.shuffle(other_available)
-                    # this is safe, if needed is greater then list it will
-                    # just get max of list
-                    extra = other_available[0:needed]
-                    available.extend(extra)
-        
-            # If there are no programs left at all
-            if len(available) == 0:
+            if num <= 0:
                 return
 
-            # If there are fewer available programs than requested, 
-            # clamp to what we have
+            # First: try to get programs from the target quartile
+            program_choices = program_quartile_list[quartile]  # list of IDs
+            available = [p for p in program_choices
+                         if p not in already_chosen_programs]
+
+            # If this quartile alone doesn't have enough distinct programs,
+            # top up from other quartiles, starting with those closest
+            # to the APPLICANT'S quartile.
             if len(available) < num:
-                # Optional
-                # print(f"Clamping from {num} to {len(available)} 
-                # in quartile {quartile} for applicant {self.id}")
+                # note: this if statement never occurs in the
+                # base case scenario and is only for edge cases
+                # when there are not enough available programs in the
+                # quartile of interest
+                needed = num - len(available)
+
+                for q in quartiles_by_closeness:
+                    if q == quartile:
+                        # we've already pulled from this quartile
+                        continue
+
+                    candidates_q = [
+                        p for p in program_quartile_list[q]
+                        if (p not in already_chosen_programs)
+                        and (p not in available)
+                    ]
+                    if not candidates_q:
+                        continue
+
+                    if len(candidates_q) <= needed:
+                        # take all of them
+                        available.extend(candidates_q)
+                        needed -= len(candidates_q)
+                    else:
+                        # randomly choose just enough from this quartile
+                        extra = np.random.choice(
+                            candidates_q, size=needed, replace=False
+                        )
+                        available.extend(extra.tolist())
+                        needed = 0
+
+                    if needed == 0:
+                        break
+
+            # If there are no programs left at all, we're done
+            if not available:
+                return
+
+            # If, even after topping up, there are fewer than num programs,
+            # clamp num to what we actually have.
+            if len(available) < num:
                 num = len(available)
-            
-            # now do a simple numpy pick without replacement
+
+            # Final sample without replacement from `available`
             choices = np.random.choice(available, size=num, replace=False)
             for choice in choices:
                 applications.append(choice)
+                # you need this already chosen program since you
+                # need to call again for next quartile
                 already_chosen_programs.add(choice)
                 if signals:
-                    all_programs[choice].received_signals.append(self.id) 
+                    all_programs[choice].received_signals.append(self.id)
                 else:
                     all_programs[choice].received_no_signals.append(self.id)
+
  
         _add_to_application_list(divisions_of_4, quartile_above)
         _add_to_application_list(divisions_of_4, quartile_below)
@@ -211,10 +282,10 @@ class Applicant:
         self.signaled_programs = []
         self.non_signaled_programs = []
         self.signaled_programs = self.pick_programs(
-            programs, program_quartile_list, True
+            programs, program_quartile_list, True, RANDOMIZE_PICK
         )
         self.non_signaled_programs = self.pick_programs(
-            programs, program_quartile_list, False
+            programs, program_quartile_list, False, RANDOMIZE_PICK
         )
         self.signaled_programs.sort() # sort in ascending order
         self.non_signaled_programs.sort() # sort in ascending order
@@ -276,7 +347,7 @@ class Program:
             self.final_rank_list = sorted_signals[0:self.num_interviews]
         else:
             remaining_spots = self.num_interviews - len(self.received_signals)
-            # TODO: can relax this assumption of having to review everybody
+            # TO nt DO: can relax this assumption of having to review everybody
             # if you don't fill with signals with what Bruce and I chatted
             # about regarding some greedy parallel optimization
             self.reviewed_applications += len(self.received_no_signals)
@@ -511,5 +582,5 @@ if __name__ == "__main__":
             final_dataframe.loc[len(final_dataframe)] = unfilled_spots
             final_dataframe.loc[len(final_dataframe)] = reviews_per_program
 
-    # Same output as before
-    final_dataframe.to_csv('simulation_results.csv', index=False)
+    prefix = 'simulation_results/' + result_print_prefix
+    final_dataframe.to_csv(prefix +'_simulation_results.csv', index=False)

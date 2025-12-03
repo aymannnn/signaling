@@ -3,7 +3,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
-df = pd.read_csv('simulation_results.csv')
+results_directory = 'simulation_results/'
+results_prefix = results_directory + 'base_case_randomized_'
+df = pd.read_csv(results_directory+'base_case_randomized_simulation_results.csv')
 
 # now create some graphs
 indexes = df.columns.drop('Parameter')
@@ -49,8 +51,8 @@ for idx, (param, graph_name) in enumerate(zip(parameters, parameter_graph_names)
     ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('simulation_results.png', dpi=300, bbox_inches='tight')
-plt.show()
+plt.savefig(
+    results_prefix+'simulation_results.png', dpi=300, bbox_inches='tight')
 
 # Also create individual plots for more detailed view
 for param, graph_name in zip(parameters, parameter_graph_names):
@@ -81,5 +83,6 @@ for param, graph_name in zip(parameters, parameter_graph_names):
     plt.legend()
     plt.grid(True, alpha=0.3)
 
-    plt.savefig(f'{param.lower()}_plot.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.savefig(results_prefix+f'{param.lower()}_plot.png', dpi=300, bbox_inches='tight')
+
+
