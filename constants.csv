@@ -7,5 +7,5 @@ simulations_per_s,1000,int,number of simulations to run for every signal value c
 max_applications,40,int,includes signaled + non-signaled applications
 study_min_signal,5,int,minimum number of signals to study
 study_max_signal,20,int,maximum number of signals to study
-result_file_prefix,base_case,str,prefix for result file that will go to simulation_results/ folder
-completely_randomize_program_pick,0,bool, if 1 then program will randomly
+result_file_prefix,"base_case",str,prefix for result file that will go to simulation_results/ folder
+completely_randomize_program_pick,False,bool,Options are True or False: if True then program will randomly select programs from all applicants and ignore 50/25/25 quartile assumption

@@ -28,27 +28,25 @@ import os
 from collections import deque
 import sys
 
+# for profiling only, CProfiler hates multiprocessing
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
-DEBUG = False
-constants = pd.read_csv("constants_base_case_randomized.csv") if not DEBUG else pd.read_csv(
-    "constants_debug_profile.csv")
 
+
+# if you wanted could update path here but don't recommend it
+constants = pd.read_csv("constants.csv")
 constants = constants.drop(columns=['Description'])
 constants = constants.drop(columns=['Type'])
 result_print_prefix = constants.loc[
     constants['Variable'] == 'result_file_prefix', 'Value'].values[0]
-
 RANDOMIZE_PICK = constants.loc[
     constants['Variable'] == 'completely_randomize_program_pick', 'Value'].values[0
 ]
-RANDOMIZE_PICK = bool(RANDOMIZE_PICK)
-
+RANDOMIZE_PICK = False if RANDOMIZE_PICK.lower().strip() == 'false' else True
 drop_constants = [
     'result_file_prefix',
     'completely_randomize_program_pick'
 ]
-
-constants = constants[constants['Variable'] != 'result_file_prefix']
+constants = constants[~constants['Variable'].isin(drop_constants)]
 CONSTANTS = constants.set_index(
     'Variable')['Value'].astype(int).to_dict()
 
@@ -59,7 +57,8 @@ def print_constants():
     print(f"Spots per program: {CONSTANTS['spots_per_program']}, Interviews per spot: {CONSTANTS['interviews_per_spot']}")
     print(f"Maximum applications per applicant: {CONSTANTS['max_applications']}")
     print(f"Simulations per signal value: {CONSTANTS['simulations_per_s']}")
-    print(f"Studying signal values from {CONSTANTS['study_min_signal']} to {CONSTANTS['study_max_signal']}\n")
+    print(f"Studying signal values from {CONSTANTS['study_min_signal']} to {CONSTANTS['study_max_signal']}")
+    print(f"Completely randomize program pick: {RANDOMIZE_PICK}\n")
     
 
 def _simulate_for_signal(signal_value: int, seed: int | None = None):

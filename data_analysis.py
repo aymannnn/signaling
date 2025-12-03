@@ -3,86 +3,133 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
-results_directory = 'simulation_results/'
-results_prefix = results_directory + 'base_case_randomized_'
-df = pd.read_csv(results_directory+'base_case_randomized_simulation_results.csv')
+# -------------------------------------------------------------------
+# Load data
+# -------------------------------------------------------------------
 
-# now create some graphs
-indexes = df.columns.drop('Parameter')
-indexes = [int(i) for i in indexes]
-indexes.sort()
+results_directory = 'simulation_results/'
+# will read in from constants file used in simulation.py
+constants = pd.read_csv('constants.csv')
+file_prefix = constants.loc[constants['Variable'] ==
+                            'result_file_prefix', 'Value'].values[0]
+print(file_prefix)
+if not file_prefix:
+    file_prefix = ''
+print(file_prefix)
+graphs_prefix = results_directory + file_prefix
+file_path = results_directory + file_prefix + '_simulation_results.csv'
+df = pd.read_csv(file_path)
+
+# signal values (column names except 'Parameter')
+signal_values = df.columns.drop('Parameter')
+signal_values = sorted(int(i) for i in signal_values)
 
 parameters = ['Unmatched_Applicants', 'Unfilled_Spots', 'Reviews_Per_Program']
-parameter_graph_names = ['Number of Unmatched Applicants',
-                         'Number of Unfilled Spots',
-                         'Average Number of Reviews Per Program']
+parameter_graph_names = [
+    'Number of Unmatched Applicants',
+    'Number of Unfilled Spots',
+    'Average Number of Reviews Per Program',
+]
 
-# jointo graph
-fig, axes = plt.subplots(len(parameters), 1, figsize=(10, 4*len(parameters)))
-for idx, (param, graph_name) in enumerate(zip(parameters, parameter_graph_names)):
-    # Filter data for this parameter
-    param_data = df[df['Parameter'] == param]
+# -------------------------------------------------------------------
+# Global plotting style
+# -------------------------------------------------------------------
+plt.rcParams.update({
+    "figure.dpi": 300,
+    "savefig.dpi": 300,
+    "font.size": 8,
+    "axes.labelsize": 8,
+    "axes.titlesize": 8,
+    "xtick.labelsize": 8,
+    "ytick.labelsize": 8,
+    "legend.fontsize": 8,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+})
 
-    # Calculate statistics for each signal value
+line_color = "black"
+ci_color = "grey"
+
+# -------------------------------------------------------------------
+# Functions
+# -------------------------------------------------------------------
+
+
+def compute_means_and_ci(param_data, signal_values, alpha=0.95):
     means = []
     ci_lower = []
     ci_upper = []
 
-    for signal_val in indexes:
-        values = param_data[str(signal_val)].values
-        mean = np.mean(values)
-        sem = stats.sem(values)  # Standard error of mean
-        ci = stats.t.interval(0.95, len(values)-1, loc=mean, scale=sem)
+    for s in signal_values:
+        col = str(s)
+        values = param_data[col].values
+
+        mean = np.nanmean(values)
+        if len(values) > 1:
+            sem = stats.sem(values, nan_policy='omit')
+            ci = stats.t.interval(alpha, len(values) - 1, loc=mean, scale=sem)
+            lower, upper = ci
+        else:
+            lower = upper = mean
 
         means.append(mean)
-        ci_lower.append(ci[0])
-        ci_upper.append(ci[1])
+        ci_lower.append(lower)
+        ci_upper.append(upper)
 
-    # Plot
-    ax = axes[idx]
-    ax.plot(indexes, means, 'b-', linewidth=2, label='Mean')
-    ax.fill_between(indexes, ci_lower, ci_upper, alpha=0.3, label='95% CI')
+    return np.array(means), np.array(ci_lower), np.array(ci_upper)
 
-    ax.set_xlabel('Number of Signals', fontsize=12)
-    ax.set_ylabel(graph_name, fontsize=12)
-    ax.set_title(f'{graph_name} vs Number of Signals', fontsize=14)
-    ax.set_xticks(indexes)  # Set x-axis to show all integer values
-    ax.legend()
-    ax.grid(True, alpha=0.3)
 
-plt.tight_layout()
-plt.savefig(
-    results_prefix+'simulation_results.png', dpi=300, bbox_inches='tight')
+# -------------------------------------------------------------------
+# Joint figure with subplots
+# -------------------------------------------------------------------
+fig, axes = plt.subplots(
+    len(parameters), 1,
+    figsize=(6, 2.5 * len(parameters)),
+    sharex=True
+)
 
-# Also create individual plots for more detailed view
+for ax, param, graph_name in zip(axes, parameters, parameter_graph_names):
+    param_data = df[df['Parameter'] == param]
+    means, ci_lower, ci_upper = compute_means_and_ci(param_data, signal_values)
+
+    ax.plot(signal_values, means, color=line_color, linewidth=2,
+            marker='o', label='Mean')
+    ax.fill_between(signal_values, ci_lower, ci_upper,
+                    color=ci_color, alpha=0.3, label='95% CI')
+
+    ax.set_ylabel(graph_name)
+    ax.set_title(graph_name)
+    ax.set_xticks(signal_values)
+    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.legend(frameon=False)
+
+axes[-1].set_xlabel('Number of Signals')
+
+fig.tight_layout()
+fig.savefig(graphs_prefix + '_joint_results.png', bbox_inches='tight')
+plt.close(fig)
+
+# -------------------------------------------------------------------
+# Individual figures
+# -------------------------------------------------------------------
 for param, graph_name in zip(parameters, parameter_graph_names):
     param_data = df[df['Parameter'] == param]
+    means, ci_lower, ci_upper = compute_means_and_ci(param_data, signal_values)
 
-    means = []
-    ci_lower = []
-    ci_upper = []
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(signal_values, means, color=line_color, linewidth=2,
+            marker='o', label='Mean')
+    ax.fill_between(signal_values, ci_lower, ci_upper,
+                    color=ci_color, alpha=0.3, label='95% CI')
 
-    for signal_val in indexes:
-        values = param_data[str(signal_val)].values
-        mean = np.mean(values)
-        sem = stats.sem(values)
-        ci = stats.t.interval(0.95, len(values)-1, loc=mean, scale=sem)
+    ax.set_xlabel('Number of Signals')
+    ax.set_ylabel(graph_name)
+    ax.set_title(f'{graph_name} vs Number of Signals')
+    ax.set_xticks(signal_values)
+    ax.grid(True, alpha=0.3, linestyle='--')
+    ax.legend(frameon=False)
 
-        means.append(mean)
-        ci_lower.append(ci[0])
-        ci_upper.append(ci[1])
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(indexes, means, 'b-', linewidth=2, marker='o', label='Mean')
-    plt.fill_between(indexes, ci_lower, ci_upper, alpha=0.3, label='95% CI')
-
-    plt.xlabel('Number of Signals', fontsize=12)
-    plt.ylabel(graph_name, fontsize=12)
-    plt.title(f'{graph_name} vs Number of Signals', fontsize=14)
-    plt.xticks(indexes)  # Set x-axis to show all integer values
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-
-    plt.savefig(results_prefix+f'{param.lower()}_plot.png', dpi=300, bbox_inches='tight')
-
-
+    fig.tight_layout()
+    fig.savefig(graphs_prefix + f'_{param.lower()}_plot.png',
+                bbox_inches='tight')
+    plt.close(fig)
