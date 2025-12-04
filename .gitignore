@@ -2,6 +2,3 @@
 *.github
 *.vscode
 __pycache__/
-# Ignore all CSVs except constants
-*.csv
-!constants.csv

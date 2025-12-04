@@ -1,0 +1,11 @@
+Variable,Value,Type,Description
+n_programs,367,int,number of residency programs
+n_applicants,3300,int,number of residency applicants
+spots_per_program,5,int,2025 about 1800 positions which is almost 5
+interviews_per_spot,12,int,how many interviews per spot on average
+simulations_per_s,5,int,number of simulations to run for every signal value checked
+max_applications,40,int,includes signaled + non-signaled applications
+study_min_signal,5,int,minimum number of signals to study
+study_max_signal,20,int,maximum number of signals to study
+result_file_prefix,base_case,str,prefix for result file that will go to simulation_results/ folder
+completely_randomize_program_pick,0,bool, if 1 then program will randomly
