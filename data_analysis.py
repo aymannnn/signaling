@@ -3,13 +3,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import stats
 
+GAMMA = True
+
 # -------------------------------------------------------------------
 # Load data
 # -------------------------------------------------------------------
 
 results_directory = 'simulation_results/'
 # will read in from constants file used in simulation.py
-constants = pd.read_csv('constants.csv')
+constants = pd.read_csv('constants_gamma.csv') if GAMMA else pd.read_csv('constants.csv')
 file_prefix = constants.loc[constants['Variable'] ==
                             'result_file_prefix', 'Value'].values[0]
 print(file_prefix)

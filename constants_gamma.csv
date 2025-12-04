@@ -1,0 +1,12 @@
+Variable,Value,Type,Description
+n_programs,367,int,number of residency programs
+n_applicants,3300,int,number of residency applicants
+spots_per_program,5,int,2025 about 1800 positions which is almost 5
+interviews_per_spot,12,int,how many interviews per spot on average
+simulations_per_s,1000,int,number of simulations to run for every signal value checked
+gamma_alpha,20,int,alpha parameter/shape for gamma distribution (mean = alpha*beta)
+gamma_beta,4,float,beta parameter/scale for gamma distribution (var = alpha*beta^2)
+study_min_signal,5,int,minimum number of signals to study
+study_max_signal,25,int,maximum number of signals to study
+result_file_prefix,"gamma_20_4",str,prefix for result file that will go to simulation_results/ folder
+completely_randomize_program_pick,False,bool,Options are True or False: if True then program will randomly select programs from all applicants and ignore 50/25/25 quartile assumption

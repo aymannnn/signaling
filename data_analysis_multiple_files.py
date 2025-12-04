@@ -18,6 +18,7 @@ SCENARIOS = [
     ("simulation_results/base_case/base_case_simulation_results.csv", "Base case - AC 40"),
     ("simulation_results/base_case_randomized/base_case_randomized_simulation_results.csv",
      "BC - RP/AC 40"),
+    ("simulation_results/gamma_20_4/gamma_20_4_simulation_results.csv", "Gamma(20,4)"),
 ]
 
 OUTPUT_DIR = Path("simulation_results/joint_graph/")
