@@ -354,8 +354,8 @@ class Program:
             self.final_rank_list = (
                 sorted_signals + 
                 sorted(self.received_no_signals)[0:remaining_spots])
-        if len(self.final_rank_list) != self.num_interviews:
-                    print(f"Warning: Program {self.id} has {len(self.final_rank_list)} in rank list but expected {self.num_interviews}")
+        # if len(self.final_rank_list) != self.num_interviews:
+        #             print(f"Warning: Program {self.id} has {len(self.final_rank_list)} in rank list but expected {self.num_interviews}. Can be due to not enough applications and is not always abnormal for edge cases (low number of application cap).")
                     
     def __init__(self, id_index):
         self.id = id_index
