@@ -29,7 +29,10 @@ from collections import deque
 import sys
 
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
+PRINT_ALL_DATA = True
 
+# there is a better way to do this but for now keep
+# will have to manually add of these optimals if we add more...
 HEATMAP_RESULTS_COLUMNS = [
     # same as generated from files
     'n_programs',
@@ -41,22 +44,60 @@ HEATMAP_RESULTS_COLUMNS = [
     'study_min_signal',
     'study_max_signal',
     'result_file_prefix',
-    # additional data from this simulation
+    # PROCESSED DATA PER CONSTANT SET
+    # DERIVED FROM GET_SIMULATION_OPTIMALS
+    # best signal RPP
     'best_signal_rpp',
-    'mean_reviews_per_program_best_rpp',
-    'mean_unmatched_applicants_best_rpp',
-    'mean_unfilled_spots_best_rpp',
+    'reviews_per_program_best_rpp',
+    'unmatched_applicants_best_rpp',
+    'unfilled_spots_best_rpp',
+    'pct_interview_given_signal_best_rpp',
+    'pct_interview_given_nosignal_best_rpp',
+    'pct_interview_given_application_best_rpp',
+    # best signal UA
     'best_signal_ua',
-    'mean_reviews_per_program_best_ua',
-    'mean_unmatched_applicants_best_ua',
-    'mean_unfilled_spots_best_ua',
+    'reviews_per_program_best_ua',
+    'unmatched_applicants_best_ua',
+    'unfilled_spots_best_ua',
+    'pct_interview_given_signal_best_ua',
+    'pct_interview_given_nosignal_best_ua',
+    'pct_interview_given_application_best_ua',
+    # best signal UFS
     'best_signal_ufs',
-    'mean_reviews_per_program_best_ufs',
-    'mean_unmatched_applicants_best_ufs',
-    'mean_unfilled_spots_best_ufs'
+    'reviews_per_program_best_ufs',
+    'unmatched_applicants_best_ufs',
+    'unfilled_spots_best_ufs',
+    'pct_interview_given_signal_best_ufs',
+    'pct_interview_given_nosignal_best_ufs',
+    'pct_interview_given_application_best_ufs',
+    # best signal pigs 
+    'best_signal_pigs',
+    'reviews_per_program_best_pigs',
+    'unmatched_applicants_best_pigs',
+    'unfilled_spots_best_pigs',
+    'pct_interview_given_signal_best_pigs',
+    'pct_interview_given_nosignal_best_pigs',
+    'pct_interview_given_application_best_pigs',
+    # best signal pigns
+    'best_signal_pigns',
+    'reviews_per_program_best_pigns',
+    'unmatched_applicants_best_pigns',
+    'unfilled_spots_best_pigns',
+    'pct_interview_given_signal_best_pigns',
+    'pct_interview_given_nosignal_best_pigns',
+    'pct_interview_given_application_best_pigns',
+    # best signal piga
+    'best_signal_piga',
+    'reviews_per_program_best_piga',
+    'unmatched_applicants_best_piga',
+    'unfilled_spots_best_piga',
+    'pct_interview_given_signal_best_piga',
+    'pct_interview_given_nosignal_best_piga',
+    'pct_interview_given_application_best_piga'
 ]
 
 HEATMAP_RESULTS_PATH = 'heatmap_results/heatmap_results.csv'
+ALL_DATA_PATH = 'heatmap_results/all_data/'
 CONSTANTS_PATH = 'constants_heatmap/randomized_constants.csv'
 
 def read_heatmaps() -> pd.DataFrame:         
@@ -94,6 +135,9 @@ class Applicant:
         "signaled_programs",
         "non_signaled_programs",
         "final_rank_list",
+        "signaled_interviews",
+        "non_signaled_interviews",
+        "interviews_received"
     )
 
     n_applications = None
@@ -262,6 +306,9 @@ class Applicant:
         self.final_rank_list = (
             self.signaled_programs + self.non_signaled_programs
         )
+        self.signaled_interviews = []
+        self.non_signaled_interviews = []
+        self.interviews_received = []
 
 
 class Program:
@@ -316,8 +363,6 @@ class Program:
             self.final_rank_list = (
                 sorted_signals +
                 sorted(self.received_no_signals)[0:remaining_spots])
-        # if len(self.final_rank_list) != self.num_interviews:
-        #             print(f"Warning: Program {self.id} has {len(self.final_rank_list)} in rank list but expected {self.num_interviews}. Can be due to not enough applications and is not always abnormal for edge cases (low number of application cap).")
 
     def __init__(self, id_index, constants):
         self.id = id_index
@@ -327,6 +372,7 @@ class Program:
         self.reviewed_applications = 0
         self.final_rank_list = []  # this is length of interviews_per_program
         self.tentative_matches = []
+
 
 
 def get_quartile_dict(n) -> dict:
@@ -422,6 +468,48 @@ def stable_match(applicants: list, programs: list):
 
     return applicants, programs
 
+def count_applicant_interview_rates(applicants: list):
+    '''
+    Counts the interview rates for signaled and non-signaled programs.
+    
+    Returns:
+        signaled_interview_rate: fraction of signaled programs that gave interviews
+        non_signaled_interview_rate: fraction of non-signaled programs that gave interviews
+    '''
+    
+    results = {}
+    
+    total_signaled_interviews = 0
+    total_signaled_programs = 0
+    total_non_signaled_interviews = 0
+    total_non_signaled_programs = 0
+
+    for app in applicants:
+        total_signaled_programs += len(app.signaled_programs)
+        total_non_signaled_programs += len(app.non_signaled_programs)
+        total_signaled_interviews += len(app.signaled_interviews)
+        total_non_signaled_interviews += len(app.non_signaled_interviews)
+
+    signaled_interview_rate = (
+        total_signaled_interviews / total_signaled_programs
+        if total_signaled_programs > 0 else 0.0
+    )
+    
+    non_signaled_interview_rate = (
+        total_non_signaled_interviews / total_non_signaled_programs
+        if total_non_signaled_programs > 0 else 0.0
+    )
+    
+    overall_interview_rate = (
+        (total_signaled_interviews + total_non_signaled_interviews) / (
+            total_signaled_programs + total_non_signaled_programs)
+        )
+    
+    results['pct_interview_given_signal'] = signaled_interview_rate
+    results['pct_interview_given_nosignal'] = non_signaled_interview_rate
+    results['pct_interview_given_application'] = overall_interview_rate
+    
+    return results
 
 def count_unmatched(applicants: list, programs: list):
     '''
@@ -434,6 +522,11 @@ def count_unmatched(applicants: list, programs: list):
     unmatched_applicants = sum(
         1 for app in applicants if app.matched_program is None)
     unfilled_spots = 0
+    
+    # for each applicant also calculate len(signaled_interviews)/
+    # len(signaled_programs), len(signaled_interviews)/(len both)
+    # len(non_signaled_interviews)/len(non_signaled_programs), 
+    # len nonsignaled_interviews)/(len both)
 
     for program in programs:
         filled_spots = len(program.tentative_matches)
@@ -443,6 +536,8 @@ def count_unmatched(applicants: list, programs: list):
 
 
 def run_simulation(s, constants):
+    # 12/15: change this to a dict instead of this triple
+    results = {}
     program_quartile_list = get_quartile_dict(constants['n_programs'])
     programs = [Program(j, constants) for j in range(constants['n_programs'])]
     applicants = [
@@ -453,43 +548,77 @@ def run_simulation(s, constants):
     total_reviews = sum(
         [program.reviewed_applications for program in programs])
     total_reviews_per_program = total_reviews / constants['n_programs']
-
+    results['reviews_per_program'] = total_reviews_per_program
+    
+    # now also calculate the applicant interviews received
+    for program in programs:
+        for app_id in program.final_rank_list:
+            applicants[app_id].interviews_received.append(program.id)
+            if program.id in applicants[app_id].signaled_programs:
+                applicants[app_id].signaled_interviews.append(program.id)
+            else:
+                applicants[app_id].non_signaled_interviews.append(program.id)
+    
+    # calculate average applicant interview statistics
+    
+    applicant_statistics = count_applicant_interview_rates(applicants)
+    results['pct_interview_given_signal'] = applicant_statistics[
+        'pct_interview_given_signal']
+    results['pct_interview_given_nosignal'] = applicant_statistics[
+        'pct_interview_given_nosignal']
+    results['pct_interview_given_application'] = applicant_statistics[
+        'pct_interview_given_application']
+            
     # last step is for the matching algorithm, which is stable matching
     applicants_matched, programs_matched = stable_match(applicants, programs)
     unmatched_applicants, unfilled_spots = count_unmatched(
         applicants_matched, programs_matched)
-
-    return unmatched_applicants, unfilled_spots, total_reviews_per_program
-
+    
+    results['unmatched_applicants'] = unmatched_applicants
+    results['unfilled_spots'] = unfilled_spots
+    
+    return results
 
 def get_simulation_optimals(
     simulation_results, signal_values):
     
     parameter_names_tails = {
-        'Reviews_Per_Program': 'rpp',
-        'Unmatched_Applicants': 'ua',
-        'Unfilled_Spots': 'ufs'
+        'reviews_per_program': 'rpp',
+        'unmatched_applicants': 'ua',
+        'unfilled_spots': 'ufs',
+        'pct_interview_given_signal': 'pigs',
+        'pct_interview_given_nosignal': 'pigns',
+        'pct_interview_given_application': 'piga'
     }
     
+    parameter_optimization = {
+        'reviews_per_program': 'min',
+        'unmatched_applicants': 'min',
+        'unfilled_spots': 'min',
+        'pct_interview_given_signal': 'max',
+        'pct_interview_given_nosignal': 'max',
+        'pct_interview_given_application': 'max'
+    }
+    
+    # get the best signal for each parameter optimum
     results = {}
-    parameter_means = {}
     
-    # get the best signal for each parameter, best is minimum for each which
-    # is convenient
+    # helpers to get max and min
+    def _get_max_parameter_mean(param_df, signal_values):
+        max_value = float('-inf')
+        best_s = None
+        for s in signal_values:
+            col = str(s)
+            values = param_df[col].values
+            mean = np.nanmean(values)
+            if mean > max_value:
+                max_value = mean
+                best_s = s        
+        return best_s
     
-    dataframes = {}
-    
-    for parameter in parameter_names_tails.keys():
-        dataframes[parameter] = simulation_results[
-            simulation_results['Parameter'] == parameter]
-    
-    for parameter in parameter_names_tails.keys():
-        param_df = dataframes[parameter]
-        mean_values = []
+    def _get_min_parameter_mean(param_df, signal_values):
         min_value = float('inf')
         best_s = None
-        # NOTE: ADD TO DISCUSSION WE DO NOT HANDLE TIES!!!!
-        # Well, we do, but it resolves to the lowest possible signal value
         for s in signal_values:
             col = str(s)
             values = param_df[col].values
@@ -497,13 +626,27 @@ def get_simulation_optimals(
             if mean < min_value:
                 min_value = mean
                 best_s = s        
+        return best_s
+    
+    for parameter in parameter_names_tails.keys():
+        best_s = None
+        param_df = simulation_results[
+            simulation_results['Parameter'] == parameter]
+        if parameter_optimization[parameter] == 'max':
+            best_s = _get_max_parameter_mean(param_df, signal_values)
+        else:
+            best_s = _get_min_parameter_mean(param_df, signal_values)
         result_string = f"best_signal_{parameter_names_tails[parameter]}"
         results[result_string] = best_s
     
     # now should have results filled out for the best signal 
     # with each key being the best_signal_{tail}
     # now add on the mean reviews for each other parameter
+    # at that value
     
+    # it looks like a double loop but it's intentional, you first
+    # get the best signal for each parameter, then you generate
+    # the mean for each parameter AT that single best signal
     for parameter in parameter_names_tails.keys():
         # get that same best signal key
         tail = parameter_names_tails[parameter]
@@ -511,14 +654,12 @@ def get_simulation_optimals(
         optimal_signal_integer = results[result_string]
         optimal_signal_string = str(optimal_signal_integer)
         
-        # take the mean AT that signal key
-        results[f"mean_reviews_per_program_best_{tail}"] = np.nanmean(
-            dataframes['Reviews_Per_Program'][optimal_signal_string].values)
-        results[f"mean_unmatched_applicants_best_{tail}"] = np.nanmean(
-            dataframes['Unmatched_Applicants'][optimal_signal_string].values)
-        results[f"mean_unfilled_spots_best_{tail}"] = np.nanmean(
-            dataframes['Unfilled_Spots'][optimal_signal_string].values
-        )
+        for parameter_name in parameter_names_tails.keys():
+            # take the mean AT that signal key
+            results[f"{parameter_name}_best_{tail}"] = np.nanmean(
+                simulation_results[
+                    simulation_results['Parameter'] == parameter_name
+                ][optimal_signal_string].values)
             
     return results
 
@@ -543,6 +684,7 @@ def process_simulation_heatmap(
         else:
             print(f"Warning: Key {key} not found in constants or results.")
             final_dataframe[key] = np.nan
+    
     return pd.DataFrame([final_dataframe])
 
 
@@ -571,11 +713,12 @@ def _simulate_for_signal(
         np.random.seed(seed)
 
     Applicant.update_signal_number(signal_value)
-    app, spot, review = run_simulation(signal_value, constants)
-    return app, spot, review
+    simulation_results = run_simulation(signal_value, constants)
+    
+    return simulation_results
 
 
-def run_simulation_heatmap(CONSTANTS: pd.Series) -> pd.DataFrame:
+def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
     '''
     Runs a full heatmap simulation for a given set of CONSTANTS.
     Returns a DataFrame with the results for this constant set.
@@ -583,13 +726,30 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> pd.DataFrame:
     min_s = int(CONSTANTS["study_min_signal"])
     max_s = int(CONSTANTS["study_max_signal"])
     signal_values = list(range(min_s, max_s + 1))
-    
     signal_range = [str(v) for v in signal_values]
     df_simulation = pd.DataFrame(columns=['Parameter'] + signal_range)
-
-    unmatched_applicants = ['Unmatched_Applicants']
-    unfilled_spots = ['Unfilled_Spots']
-    reviews_per_program = ['Reviews_Per_Program']
+    
+    # to build array
+    n_signals = len(signal_values)
+    n_runs = CONSTANTS['simulations_per_s']
+    
+    # this dataframe holds all simulation results for each signal range
+    # and will append to the df_simulation later where first column is
+    # parameter and rest are the values at the signal values
+    simulation_results_names = [
+        'unmatched_applicants',
+        'unfilled_spots',
+        'reviews_per_program',
+        'pct_interview_given_signal',
+        'pct_interview_given_nosignal',
+        'pct_interview_given_application'
+    ]
+    
+    # initialize array to hold all of simulation results
+    # for each parameter
+    # array is [run][signal_value]
+    simulation_results = {
+        m: np.empty((n_runs, n_signals)) for m in simulation_results_names}
 
     if USE_PARALLEL:
         # -------- PARALLEL VERSION (normal fast run) --------
@@ -621,25 +781,19 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> pd.DataFrame:
                     for s_val, seed in zip(signal_values, seeds)
                 ]
 
-                # Collect results (same order as signal_values)
+                # Collect results, should each be a dictionary
+                # with all of the following values
                 results = [f.result() for f in futures]
-
-                # Rebuild rows in the same order as the original code
-                unmatched_applicants = ['Unmatched_Applicants']
-                unfilled_spots = ['Unfilled_Spots']
-                reviews_per_program = ['Reviews_Per_Program']
-
-                for (app, spot, review) in results:
-                    unmatched_applicants.append(app)
-                    unfilled_spots.append(spot)
-                    reviews_per_program.append(review)
-
-                df_simulation.loc[len(df_simulation)
-                                    ] = unmatched_applicants
-                df_simulation.loc[len(df_simulation)] = unfilled_spots
-                df_simulation.loc[len(df_simulation)] = reviews_per_program
+                
+                for j, sim in enumerate(results):
+                    for m in simulation_results_names:
+                        # i is defined above as the "run" number
+                        # j is the signal value index
+                        simulation_results[m][i,j] = sim[m]
 
     else:
+        # TODO: FIX SERIAL VERSION
+        # DOES NOT WORK RIGHT NOW
         # -------- SERIAL VERSION (for cProfile / debugging) --------
         for i in range(CONSTANTS['simulations_per_s']):
             print(
@@ -647,9 +801,9 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> pd.DataFrame:
                 f"{CONSTANTS['simulations_per_s']} (serial mode)"
             )
 
-            unmatched_applicants = ['Unmatched_Applicants']
-            unfilled_spots = ['Unfilled_Spots']
-            reviews_per_program = ['Reviews_Per_Program']
+            unmatched_applicants = ['unmatched_applicants']
+            unfilled_spots = ['unfilled_spots']
+            reviews_per_program = ['reviews_per_program']
 
             # In serial mode we just call the same worker directly,
             # without any multiprocessing.
@@ -663,10 +817,26 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> pd.DataFrame:
             df_simulation.loc[len(df_simulation)] = unfilled_spots
             df_simulation.loc[len(df_simulation)] = reviews_per_program
 
-    final_results = process_simulation_heatmap(
+    dataframe_rows = []
+    for m in simulation_results_names:
+        for run in range(n_runs):
+            row = [m] + simulation_results[m][run].tolist()
+            dataframe_rows.append(row)
+    
+    df_simulation = pd.DataFrame(
+        dataframe_rows,
+        columns=['Parameter'] + signal_range
+    )        
+
+    processed_results = process_simulation_heatmap(
         df_simulation, CONSTANTS, signal_values)
 
-    return final_results
+    all_results = {
+        'all_data': df_simulation,
+        'processed_results': processed_results
+    }
+
+    return all_results
 
 
 
@@ -687,37 +857,37 @@ if __name__ == "__main__":
     
     to_run_constants = unique_constants - already_run_heatmaps
     
-    
-    # UNCOMMENT LATER
-    
-    #print(f"Number of constants left to run: {len(to_run_constants)}.")
-    #to_run_constants_df = constants[
-    #    constants['result_file_prefix'].isin(to_run_constants)]
-    
-    # UNCOMMENT LATER
+    print(f"Number of constants left to run: {len(to_run_constants)}.")
+    to_run_constants_df = constants[
+       constants['result_file_prefix'].isin(to_run_constants)]
     
     print('Number of cores:', os.cpu_count())
-    
-    #### TODO: COMMENT BELOW OUT LATER !!!! FOR TESTING ONLY
-    to_run_constants_df = (
-        constants.loc[constants['result_file_prefix'].isin(to_run_constants)]
-        .sort_values('n_applicants', ascending=True)
-    )
-    
-    ### END COMMENTS #### 
 
     iteration = 0
     for _, CONSTANTS in to_run_constants_df.iterrows():
         iteration += 1
-        results = run_simulation_heatmap(CONSTANTS)
+        all_results = run_simulation_heatmap(CONSTANTS)
+        simulation_results = all_results['all_data']
+        processed_results = all_results['processed_results']
+        
+        # print all results to csv for this constant set, in case 
+        # we need to dissect down each signal later
+        # will be easy to process individual files using 
+        # existing scripts
+        
+        simulation_results.to_csv(
+            f"{ALL_DATA_PATH}{CONSTANTS['result_file_prefix']}.csv")
+        
         # Avoid concat-with-empty/all-NA behavior that pandas is changing
+        # this is the summary simulation data that we export to
+        # heatmap_results.csv
         if heatmap_data.empty:
-            heatmap_data = results.copy()
+            heatmap_data = processed_results.copy()
         else:
-            heatmap_data = pd.concat([heatmap_data, results], ignore_index=True)
-        heatmap_data = pd.concat(
-            [heatmap_data, results], ignore_index=True)
-        if iteration % 10 == 0:
+            heatmap_data = pd.concat(
+                [heatmap_data, processed_results], 
+                ignore_index=True)
+        if iteration % 5 == 0:
             print(f"Completed {
                 iteration} constant sets. Exporting interim results.")
             heatmap_data.to_csv(HEATMAP_RESULTS_PATH, index=False)

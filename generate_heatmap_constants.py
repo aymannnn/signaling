@@ -4,7 +4,7 @@ import os
 
 
 EXPORT_FILE_PATH = 'constants_heatmap/randomized_constants.csv'
-NUMBER_TO_GENERATE = 10000
+NUMBER_TO_GENERATE = 5000
 SIMULATIONS_PER_S = 20
 
 # use as a final upper bound, note that max applications 
@@ -26,8 +26,8 @@ MINIMUM_APPLICATIONS = 5
 
 BOUNDS = {
     'n_programs': (10, 800), # add check that programs must be > 5
-    'n_positions': (5, 10000), # lower bound will always check for min n_programs
-    'n_applicants': (20, 18000),
+    'n_positions': (5, 10000), # change back to 10 but first some lower
+    'n_applicants': (20, 18000), # change back to 18 but first generate some lower
     'interviews_per_spot': (5, 20)
 }
 
