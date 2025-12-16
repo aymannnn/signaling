@@ -20,6 +20,7 @@ python simulation.py
 ```python
 python data_analysis.py
 ```
+
 ## Repository Structure
 
 1. constants_settings/: simple folder to save your constant settings if you'd like. The base case settings are stored here

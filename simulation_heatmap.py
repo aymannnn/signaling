@@ -28,19 +28,29 @@ import os
 from collections import deque
 import sys
 
+# can modify some of these if you'd like
+
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
 PRINT_ALL_DATA = True
+HEATMAP_RESULTS_PATH = 'heatmap_results/heatmap_results.csv'
+ALL_DATA_PATH = 'heatmap_results/all_data/'
+CONSTANTS_PATH = 'heatmap_results/randomized_constants.csv'
 
 # there is a better way to do this but for now keep
 # will have to manually add of these optimals if we add more...
 HEATMAP_RESULTS_COLUMNS = [
     # same as generated from files
+    # RANDOMIZED CONSTANTS
     'n_programs',
+    'n_positions',
     'n_applicants',
-    'spots_per_program',
     'interviews_per_spot',
-    'simulations_per_s',
     'max_applications',
+    # CALCULATED CONSTANTS
+    'applicants_per_position',
+    'minimum_unmatched',
+    'spots_per_program',
+    'simulations_per_s',
     'study_min_signal',
     'study_max_signal',
     'result_file_prefix',
@@ -54,6 +64,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_interview_given_signal_best_rpp',
     'pct_interview_given_nosignal_best_rpp',
     'pct_interview_given_application_best_rpp',
+    'pct_of_app_match_via_signal_given_matched_best_rpp',
     # best signal UA
     'best_signal_ua',
     'reviews_per_program_best_ua',
@@ -62,6 +73,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_interview_given_signal_best_ua',
     'pct_interview_given_nosignal_best_ua',
     'pct_interview_given_application_best_ua',
+    'pct_of_app_match_via_signal_given_matched_best_ua',
     # best signal UFS
     'best_signal_ufs',
     'reviews_per_program_best_ufs',
@@ -70,6 +82,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_interview_given_signal_best_ufs',
     'pct_interview_given_nosignal_best_ufs',
     'pct_interview_given_application_best_ufs',
+    'pct_of_app_match_via_signal_given_matched_best_ufs',
     # best signal pigs 
     'best_signal_pigs',
     'reviews_per_program_best_pigs',
@@ -78,6 +91,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_interview_given_signal_best_pigs',
     'pct_interview_given_nosignal_best_pigs',
     'pct_interview_given_application_best_pigs',
+    'pct_of_app_match_via_signal_given_matched_best_pigs',
     # best signal pigns
     'best_signal_pigns',
     'reviews_per_program_best_pigns',
@@ -86,6 +100,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_interview_given_signal_best_pigns',
     'pct_interview_given_nosignal_best_pigns',
     'pct_interview_given_application_best_pigns',
+    'pct_of_app_match_via_signal_given_matched_best_pigns',
     # best signal piga
     'best_signal_piga',
     'reviews_per_program_best_piga',
@@ -93,12 +108,18 @@ HEATMAP_RESULTS_COLUMNS = [
     'unfilled_spots_best_piga',
     'pct_interview_given_signal_best_piga',
     'pct_interview_given_nosignal_best_piga',
-    'pct_interview_given_application_best_piga'
+    'pct_interview_given_application_best_piga',
+    'pct_of_app_match_via_signal_given_matched_best_piga',
+    # best signal pamgs
+    'best_signal_pamgs',
+    'reviews_per_program_best_pamgs',
+    'unmatched_applicants_best_pamgs',
+    'unfilled_spots_best_pamgs',
+    'pct_interview_given_signal_best_pamgs',
+    'pct_interview_given_nosignal_best_pamgs',
+    'pct_interview_given_application_best_pamgs',
+    'pct_of_app_match_via_signal_given_matched_best_pamgs'
 ]
-
-HEATMAP_RESULTS_PATH = 'heatmap_results/heatmap_results.csv'
-ALL_DATA_PATH = 'heatmap_results/all_data/'
-CONSTANTS_PATH = 'constants_heatmap/randomized_constants.csv'
 
 def read_heatmaps() -> pd.DataFrame:         
     if not os.path.exists(HEATMAP_RESULTS_PATH):
@@ -109,6 +130,13 @@ def read_heatmaps() -> pd.DataFrame:
 
 def read_constants() -> pd.DataFrame:
     df = pd.read_csv(CONSTANTS_PATH)
+    not_integers = [
+        'applicants_per_position',
+        'result_file_prefix'
+    ]
+    for col in df.columns:
+        if col not in not_integers:
+            df[col] = df[col].astype(int)
     return df
 
 
@@ -511,7 +539,7 @@ def count_applicant_interview_rates(applicants: list):
     
     return results
 
-def count_unmatched(applicants: list, programs: list):
+def post_match_analysis(applicants: list, programs: list) -> dict:
     '''
     Counts the number of unmatched applicants and unfilled program spots.
     
@@ -519,20 +547,37 @@ def count_unmatched(applicants: list, programs: list):
         unmatched_applicants: number of applicants who did not match to any program
         unfilled_spots: total number of empty spots across all programs
     '''
-    unmatched_applicants = sum(
+    
+    post_match_counts = {}
+    
+    post_match_counts['unmatched_applicants'] = sum(
         1 for app in applicants if app.matched_program is None)
+    
     unfilled_spots = 0
     
     # for each applicant also calculate len(signaled_interviews)/
     # len(signaled_programs), len(signaled_interviews)/(len both)
     # len(non_signaled_interviews)/len(non_signaled_programs), 
     # len nonsignaled_interviews)/(len both)
+    
+    num_matched = 0
+    num_matched_via_signal = 0
+    for applicant in applicants:
+        if applicant.matched_program is not None:
+            num_matched += 1
+            if applicant.matched_program in applicant.signaled_programs:
+                num_matched_via_signal += 1
 
+    post_match_counts['pct_of_app_match_via_signal_given_matched'] = (
+        (num_matched_via_signal / num_matched) if num_matched > 0 else 0.0
+    )
     for program in programs:
         filled_spots = len(program.tentative_matches)
         unfilled_spots += program.spots_per_program - filled_spots
 
-    return unmatched_applicants, unfilled_spots
+    post_match_counts['unfilled_spots'] = unfilled_spots
+    
+    return post_match_counts
 
 
 def run_simulation(s, constants):
@@ -571,11 +616,15 @@ def run_simulation(s, constants):
             
     # last step is for the matching algorithm, which is stable matching
     applicants_matched, programs_matched = stable_match(applicants, programs)
-    unmatched_applicants, unfilled_spots = count_unmatched(
+    
+    # post matching counts
+    post_match_counts = post_match_analysis(
         applicants_matched, programs_matched)
     
-    results['unmatched_applicants'] = unmatched_applicants
-    results['unfilled_spots'] = unfilled_spots
+    results['unmatched_applicants'] = post_match_counts['unmatched_applicants']
+    results['unfilled_spots'] = post_match_counts['unfilled_spots']
+    results['pct_of_app_match_via_signal_given_matched'] = post_match_counts[
+        'pct_of_app_match_via_signal_given_matched']
     
     return results
 
@@ -588,7 +637,8 @@ def get_simulation_optimals(
         'unfilled_spots': 'ufs',
         'pct_interview_given_signal': 'pigs',
         'pct_interview_given_nosignal': 'pigns',
-        'pct_interview_given_application': 'piga'
+        'pct_interview_given_application': 'piga',
+        'pct_of_app_match_via_signal_given_matched': 'pamgs'
     }
     
     parameter_optimization = {
@@ -597,7 +647,8 @@ def get_simulation_optimals(
         'unfilled_spots': 'min',
         'pct_interview_given_signal': 'max',
         'pct_interview_given_nosignal': 'max',
-        'pct_interview_given_application': 'max'
+        'pct_interview_given_application': 'max',
+        'pct_of_app_match_via_signal_given_matched': 'max'
     }
     
     # get the best signal for each parameter optimum
@@ -629,6 +680,8 @@ def get_simulation_optimals(
         return best_s
     
     for parameter in parameter_names_tails.keys():
+        if parameter_optimization[parameter] is None:
+            continue
         best_s = None
         param_df = simulation_results[
             simulation_results['Parameter'] == parameter]
@@ -683,7 +736,7 @@ def process_simulation_heatmap(
             final_dataframe[key] = results[key]
         else:
             print(f"Warning: Key {key} not found in constants or results.")
-            final_dataframe[key] = np.nan
+            final_dataframe[key] = np.nan        
     
     return pd.DataFrame([final_dataframe])
 
@@ -742,7 +795,8 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
         'reviews_per_program',
         'pct_interview_given_signal',
         'pct_interview_given_nosignal',
-        'pct_interview_given_application'
+        'pct_interview_given_application',
+        'pct_of_app_match_via_signal_given_matched'
     ]
     
     # initialize array to hold all of simulation results
@@ -875,8 +929,8 @@ if __name__ == "__main__":
         # will be easy to process individual files using 
         # existing scripts
         
-        simulation_results.to_csv(
-            f"{ALL_DATA_PATH}{CONSTANTS['result_file_prefix']}.csv")
+        if PRINT_ALL_DATA:
+            simulation_results.to_csv(f"{ALL_DATA_PATH}{CONSTANTS['result_file_prefix']}.csv")
         
         # Avoid concat-with-empty/all-NA behavior that pandas is changing
         # this is the summary simulation data that we export to
