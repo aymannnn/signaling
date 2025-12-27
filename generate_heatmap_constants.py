@@ -29,6 +29,7 @@ FINAL_CONSTANTS_COLUMNS = [
     'applicants_per_position',
     'minimum_unmatched',
     'spots_per_program',
+    'simulated_positions',
     'simulations_per_s',
     'study_min_signal',
     'study_max_signal',
@@ -120,15 +121,22 @@ def process_row(row: pd.Series):
         return "invalid"
 
     # this will never be < 1 because always n_positions >= n_programs above
+    
     row['spots_per_program'] = n_positions // n_programs
     
+    # have to recalculate positions because we round to an integer for
+    # spots for program so it changes how many real positions we have
+    simulated_positions = n_programs * (row['spots_per_program'])
+    row['simulated_positions'] = simulated_positions
+
     # always fixed, NTD
     row['simulations_per_s'] = SIMULATIONS_PER_S
     # always 5+ applications per position so minimum is OK     
-    row['study_min_signal'] = 3
+    row['study_min_signal'] = 0
     
-    row['applicants_per_position'] = n_applicants / n_positions
-    row['minimum_unmatched'] = max(0, n_applicants - n_positions)
+    
+    row['applicants_per_position'] = n_applicants / simulated_positions
+    row['minimum_unmatched'] = max(0, n_applicants - simulated_positions)
     
     # for maximum signal: first, choose the minimum of the signal max (40)
     # or the maximum applications -3. For example, if max applications is 10,

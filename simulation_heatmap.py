@@ -22,19 +22,63 @@ apply above or below OR if there is a remainder from division by 4, those applic
 go to their own quartile.
 '''
 
+from typing import List
 import numpy as np
 import pandas as pd
 import os
 from collections import deque
 import sys
+from scipy.stats import gamma
 
 # can modify some of these if you'd like
 
 USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
 PRINT_ALL_DATA = True
-HEATMAP_RESULTS_PATH = 'heatmap_results/heatmap_results.csv'
-ALL_DATA_PATH = 'heatmap_results/all_data/'
-CONSTANTS_PATH = 'heatmap_results/randomized_constants.csv'
+
+# sensitivity analyses 
+GAMMA_MAX_APPLICATIONS = False
+GAMMA_SHAPE = 8.0
+GAMMA_SCALE = 30 / 8  # mean of 30 applications
+NO_QUARTILE = True
+
+# file paths, commented/uncommented for convenience
+
+# ----------- BASE CASE HEATMAP 
+
+# HEATMAP_RESULTS_PATH = 'results/heatmap_results_base_case.csv'
+# ALL_DATA_PATH = 'results/all_data_base_case/'
+# CONSTANTS_PATH = 'constants/base_case.csv'
+
+# ----------- NRMP ONLY 
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_results.csv'
+# ALL_DATA_PATH = 'results/all_data_nrmp/'
+# CONSTANTS_PATH = 'constants/constants_nrmp.csv'
+
+# ----------- LOCAL NRMP ANALYSIS
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_local_analysis_results.csv'
+# ALL_DATA_PATH = 'results/all_data_local_analysis/'
+# CONSTANTS_PATH = 'constants/local_nrmp_analysis_constants.csv'
+
+# ----------- NRMP LOCAL ANALYSIS WITH GAMMA APPLICATIONS
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_local_analysis_gamma_results.csv'
+# ALL_DATA_PATH = 'results/all_data_local_analysis_gamma/'
+# CONSTANTS_PATH = 'constants/local_nrmp_analysis_constants.csv'
+
+# ----------- NRMP LOCAL ANALYSIS NO QUARTILE
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_local_analysis_no_quartile_results.csv'
+# ALL_DATA_PATH = 'results/all_data_local_analysis_no_quartile/'
+# CONSTANTS_PATH = 'constants/local_nrmp_analysis_constants.csv'
+
+# ----------- NRMP LOCAL ANALYSIS NO QUARTILE WITH GAMMA
+
+HEATMAP_RESULTS_PATH = 'NRMP/nrmp_local_analysis_no_quartile_gamma_results.csv'
+ALL_DATA_PATH = 'NRMP/all_data_local_analysis_no_quartile_gamma/'
+CONSTANTS_PATH = 'NRMP/local_nrmp_analysis_constants.csv'
+
 
 # there is a better way to do this but for now keep
 # will have to manually add of these optimals if we add more...
@@ -50,6 +94,7 @@ HEATMAP_RESULTS_COLUMNS = [
     'applicants_per_position',
     'minimum_unmatched',
     'spots_per_program',
+    'simulated_positions',
     'simulations_per_s',
     'study_min_signal',
     'study_max_signal',
@@ -95,6 +140,7 @@ HEATMAP_RESULTS_COLUMNS = [
     # best signal pigns
     'best_signal_pigns',
     'reviews_per_program_best_pigns',
+    
     'unmatched_applicants_best_pigns',
     'unfilled_spots_best_pigns',
     'pct_interview_given_signal_best_pigns',
@@ -185,7 +231,8 @@ class Applicant:
     def pick_programs(self,
                       all_programs: list,
                       program_quartile_list: dict,
-                      signals: bool):
+                      signals: bool,
+                      gamma_simulation_data: dict = {}):
         '''
     The purpose of this function is to create the list of applications that
     each applicant will send. It will also update the respective program
@@ -216,7 +263,39 @@ class Applicant:
     Can also just sample other quartiles if needed
     '''
         applications = []
-        length = Applicant.n_signals if signals else Applicant.n_non_signals
+        length = 0
+        if GAMMA_MAX_APPLICATIONS:
+            if signals:
+                length = gamma_simulation_data['n_signals'][self.id]
+            else:
+                length = gamma_simulation_data['n_non_signals'][self.id]
+        else:
+            length = Applicant.n_signals if signals else Applicant.n_non_signals
+            
+        already_chosen_programs = set(
+            self.signaled_programs + self.non_signaled_programs)
+
+        maximum_remaining_programs = len(all_programs) - len(already_chosen_programs)
+
+        # very easy to ignore quartiles. just apply randomly
+        
+        if NO_QUARTILE:
+            available_programs = [
+                p.id for p in all_programs if p not in already_chosen_programs]
+            # pick randomly from available
+            program_choices = np.random.choice(
+                available_programs, size = length, replace = False)
+            for choice in program_choices:
+                applications.append(choice)
+                # you need this already chosen program since you
+                # need to call again for next quartile
+                already_chosen_programs.add(choice)
+                if signals:
+                    all_programs[choice].received_signals.append(self.id)
+                else:
+                    all_programs[choice].received_no_signals.append(self.id)
+            return applications
+        
         divisions_of_4 = length//4  # divisions of 4 go to quartiles
         remainder = length % 4  # all remainder go to same quartile
         own_quartile = self.quartile
@@ -229,9 +308,6 @@ class Applicant:
         quartiles_by_closeness = sorted(
             program_quartile_list.keys(),
             key=lambda q: abs(q - self.quartile))
-
-        already_chosen_programs = set(
-            self.signaled_programs + self.non_signaled_programs)
 
         def _add_to_application_list(num, quartile):
             if num <= 0:
@@ -307,24 +383,26 @@ class Applicant:
 
         if len(applications) != length:
             print(
-                f"Warning: Expected {length} applications but got {len(applications)} for applicant {self.id}")
+                f"Warning: Expected {length} applications but got {len(applications)} for applicant {self.id}. However, maximum remaining programs is {maximum_remaining_programs}.")
 
         return applications
 
     def __init__(self,
                  id_index: int,
                  programs: list,
-                 program_quartile_list: dict):
+                 program_quartile_list: dict,
+                 gamma_simulation_data: dict = {}):
         self.id = id_index
         self.quartile = self.get_quartile()
         self.matched_program = None
         self.signaled_programs = []
         self.non_signaled_programs = []
+        
         self.signaled_programs = self.pick_programs(
-            programs, program_quartile_list, True
+            programs, program_quartile_list, True, gamma_simulation_data
         )
         self.non_signaled_programs = self.pick_programs(
-            programs, program_quartile_list, False
+            programs, program_quartile_list, False, gamma_simulation_data
         )
         self.signaled_programs.sort()  # sort in ascending order
         self.non_signaled_programs.sort()  # sort in ascending order
@@ -580,13 +658,16 @@ def post_match_analysis(applicants: list, programs: list) -> dict:
     return post_match_counts
 
 
-def run_simulation(s, constants):
+def run_simulation(s, constants, gamma_simulation_data={}):
     # 12/15: change this to a dict instead of this triple
     results = {}
     program_quartile_list = get_quartile_dict(constants['n_programs'])
     programs = [Program(j, constants) for j in range(constants['n_programs'])]
     applicants = [
-        Applicant(i, programs, program_quartile_list) for i in range(
+        Applicant(i, 
+                  programs, 
+                  program_quartile_list, 
+                  gamma_simulation_data) for i in range(
             constants['n_applicants'])]
     for program in programs:
         program.create_final_rank_list_and_count_reviews()
@@ -755,18 +836,55 @@ def _simulate_for_signal(
     there can be a risk with parallelizaition that multiple processes
     get the same random seed and thus produce correlated results.
     """
+    if seed is not None:
+        np.random.seed(seed)
 
     Program.spots_per_program = constants['spots_per_program']
     Program.num_interviews = (
         constants['interviews_per_spot']*constants['spots_per_program'])
     Applicant.n_applicants = constants['n_applicants']
-    Applicant.n_applications = constants['max_applications']
+    
+    # base case scenario OK to set max applications and
+    # also to update signal number
+    
+    # otherwise this occurs dynamically for each applicant
 
-    if seed is not None:
-        np.random.seed(seed)
+    gamma_n_applications = []
+    gamma_n_signals = []
+    gamma_n_non_signals = []
 
-    Applicant.update_signal_number(signal_value)
-    simulation_results = run_simulation(signal_value, constants)
+    if GAMMA_MAX_APPLICATIONS:
+        # choose gamma values up to the number of applicants
+        while len(gamma_n_applications) < constants['n_applicants']:
+            sample = gamma.rvs(
+                a=GAMMA_SHAPE,
+                scale=GAMMA_SCALE,
+                size=1)
+            sample = int(sample)
+            # MUST have at least 5 applications
+            # see manuscript for details
+            if sample >= 5:
+                gamma_n_applications.append(sample)
+                # choose s if we can, otherwise go to max supported signals
+                # which would be number of applications
+                n_signals = min(signal_value, sample)
+                n_non_signals = sample - n_signals
+                gamma_n_signals.append(n_signals)
+                gamma_n_non_signals.append(n_non_signals)
+    else:
+        Applicant.n_applications = constants['max_applications']
+        Applicant.update_signal_number(signal_value)
+    
+    gamma_simulation_data = {
+        'n_applications': gamma_n_applications,
+        'n_signals': gamma_n_signals,
+        'n_non_signals': gamma_n_non_signals
+    }
+    
+    simulation_results = run_simulation(
+        signal_value, 
+        constants,
+        gamma_simulation_data=gamma_simulation_data)
     
     return simulation_results
 
@@ -825,7 +943,7 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
 
                 # Run this batch in parallel across signal values
                 # each call to simulate for run_simulation(s) is independent
-                # embarrassingly parallel in my research ... very rude name
+                # embarrassingly parallel ...
                 # pickles simulate for signal and sends payload to
                 # idle worker process -> returns future object
                 # each worker does the job and returns results
@@ -844,33 +962,10 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
                         # i is defined above as the "run" number
                         # j is the signal value index
                         simulation_results[m][i,j] = sim[m]
-
     else:
-        # TODO: FIX SERIAL VERSION
-        # DOES NOT WORK RIGHT NOW
-        # -------- SERIAL VERSION (for cProfile / debugging) --------
-        for i in range(CONSTANTS['simulations_per_s']):
-            print(
-                f"Starting simulation batch {i+1} of "
-                f"{CONSTANTS['simulations_per_s']} (serial mode)"
-            )
-
-            unmatched_applicants = ['unmatched_applicants']
-            unfilled_spots = ['unfilled_spots']
-            reviews_per_program = ['reviews_per_program']
-
-            # In serial mode we just call the same worker directly,
-            # without any multiprocessing.
-            for s_val in signal_values:
-                app, spot, review = _simulate_for_signal(CONSTANTS, s_val, seed=None)
-                unmatched_applicants.append(app)
-                unfilled_spots.append(spot)
-                reviews_per_program.append(review)
-
-            df_simulation.loc[len(df_simulation)] = unmatched_applicants
-            df_simulation.loc[len(df_simulation)] = unfilled_spots
-            df_simulation.loc[len(df_simulation)] = reviews_per_program
-
+        print("Cannot run single-threaded version at this time.")
+        sys.exit(1) 
+                        
     dataframe_rows = []
     for m in simulation_results_names:
         for run in range(n_runs):
@@ -930,7 +1025,9 @@ if __name__ == "__main__":
         # existing scripts
         
         if PRINT_ALL_DATA:
-            simulation_results.to_csv(f"{ALL_DATA_PATH}{CONSTANTS['result_file_prefix']}.csv")
+            simulation_results.to_csv(
+                f"{ALL_DATA_PATH}{CONSTANTS['result_file_prefix']}.csv", 
+                index=False)
         
         # Avoid concat-with-empty/all-NA behavior that pandas is changing
         # this is the summary simulation data that we export to

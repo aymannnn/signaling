@@ -77,3 +77,7 @@ In the base case, we keep the completely_randomize_program_pick flag off - if on
 1. First we randomzied every program that applicants applied to without the 50/25/25 split.
 2. Next, we tested a cap on 10 programs, 20 programs, 30 programs, and 50 programs and found the optimal signal number for each simulation. 
 
+
+## Other Notes
+
+All results are available upon request, they are not pushed to the github due to size limitations.
