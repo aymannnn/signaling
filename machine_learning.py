@@ -1,40 +1,94 @@
-'''
-The goal of this file is, out of curiousity, to see what will happen if
-we try and train a simple ML model on the simulation data. Perhaps some 
-unsupervised learning will reveal some interesting patterns.
-
-The outcomes we're most interested is best_signal_rpp.
-'''
-
-from sklearn.metrics import r2_score, mean_squared_error
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
-from ml_helpers import generate_whole_matrix
+from sklearn.compose import ColumnTransformer
+from sklearn.inspection import permutation_importance
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+)
+from sklearn.model_selection import (
+    GroupKFold,
+    GroupShuffleSplit,
+    KFold,
+    RandomizedSearchCV,
+    learning_curve,
+    cross_val_score,
+)
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.compose import TransformedTargetRegressor
 
-SUMMARY_DATA_PATH = Path("heatmap_results/heatmap_results.csv")
+from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet, PoissonRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.svm import SVR
+from sklearn.ensemble import HistGradientBoostingRegressor
+from scipy.stats import loguniform, randint, uniform
+from sklearn.model_selection import train_test_split
+
+
 OUTPUT_DIRECTORY = Path("machine_learning_model/")
-ALL_DATA_DIRECTORY = Path("heatmap_results/all_data/")
+df = pd.read_csv(OUTPUT_DIRECTORY / 'full_data_matrix.csv')
 
-GENERATE_MATRIX = False
-generate_whole_matrix() if GENERATE_MATRIX else None
-data_matrix = pd.read_csv(OUTPUT_DIRECTORY / 'full_data_matrix.csv')
+### PREPROCESSING ###
 
 outcome_variable = 'reviews'
-df = data_matrix.drop(columns = ['result_file_prefix'])
+
+# note that the simulations are not independent, they're grouped by
+# the result file prefix so we can do scenario-aware splitting
+group_col = 'result_file_prefix'
+groups = df[group_col]
+
+# keep group column in dataframe for splitting but NOT as a feature
+feature_df = df.drop(columns = [outcome_variable], errors = 'ignore').copy()
+
+X = feature_df
+y = df[outcome_variable].astype(float)
 
 X = df.drop(columns = [outcome_variable])
 y = df[outcome_variable]
 
-from sklearn.model_selection import train_test_split
+# get train-test split
+
+splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=0)
+train_idx, test_idx = next(splitter.split(X, y, groups=groups))
+X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+groups_train = groups.iloc[train_idx]
+
+# 5-fold cross validation, grouped
+cv = GroupKFold(n_splits=5)
+
+
+
+fitted = estimator.fit(X_train, y_train)
+y_pred = fitted.predict(X_test)
+
+# metrics
+rmse = float(np.sqrt(mean_squared_error(y_test, y_pred)))
+mae = float(mean_absolute_error(y_test, y_pred))
+r2 = float(r2_score(y_test, y_pred))
+
+metrics = {"rmse": rmse, "mae": mae, "r2": r2, "best_cv_rmse": best_cv_rmse}
+
+# ---- Save summary ----
+summary_lines = [
+    f"model_name: {model_name}",
+    f"log_target: {log_target}",
+    f"note: {spec.note}",
+    f"n_train: {len(X_train)}",
+    f"n_test:  {len(X_test)}",
+    f"test_rmse: {rmse:.4f}",
+    f"test_mae:  {mae:.4f}",
+    f"test_r2:   {r2:.4f}",
+]
+
+
 from sklearn.linear_model import LinearRegression
 
-
-df.plot(kind='density', y='reviews', figsize=(8,6))
-
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=0)
 
 # Regressor model
 regressor = LinearRegression()
@@ -47,17 +101,8 @@ y_pred_train = regressor.predict(X_train)   # predicted value of y_train
 regressor.score(X_train, y_train)  # R^2 on train set
 regressor.score(X_test, y_test)  # R^2 on test set
 
-# with an R^2 of 0.44 ...
+# with an R^2 of 0.40 ...
 
-# Now lets do a KNN-regression 
-
-from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, ConfusionMatrixDisplay, mean_squared_error, r2_score
-from sklearn.model_selection import RandomizedSearchCV, train_test_split
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.metrics import mean_squared_error, r2_score
 ks = range(1, 41)
 r2s, rmses = [], []
 

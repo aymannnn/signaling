@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gamma
 
+OUTPUT_PATH = "results/gamma_graph.png"
+
 def plot_gamma_distribution(shape, scale, max_apps, path = None):
     x = np.linspace(0, max_apps, 1000)
     y = gamma.pdf(x, a=shape, scale=scale)
@@ -23,4 +25,4 @@ def plot_gamma_distribution(shape, scale, max_apps, path = None):
         plt.savefig(path)
     plt.show()
     
-plot_gamma_distribution(shape=8.0, scale=30/8, max_apps=100, path="NRMP/gamma_graph.png")
+plot_gamma_distribution(shape=8.0, scale=30/8, max_apps=100, path=OUTPUT_PATH)

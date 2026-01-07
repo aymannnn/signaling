@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import qmc
 
-EXPORT_FILE_PATH = 'heatmap_results/randomized_constants.csv'
+EXPORT_FILE_PATH = 'constants/base_case.csv'
 NUMBER_TO_GENERATE_BASE_2 = 10 # 2^10 = 1024 samples
 SIMULATIONS_PER_S = 20 # always constant
 SIGNAL_MAX = 40 # max number of signals

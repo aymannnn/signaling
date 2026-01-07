@@ -7,8 +7,9 @@ import re
 import warnings
 
 # for the joint graph with everything together
-GRAPH_OUTPUT_DIR = Path("NRMP/graphs/")
-INPUT_FILES = Path("NRMP/all_data_nrmp/")
+JOINT_OUTPUT_DIR = Path("figures/graphs_NRMP_joint/")
+INDIVIDUAL_OUTPUT_DIR = Path("figures/graphs_NRMP_individual/")
+INPUT_FILES = Path("results/all_data_nrmp/")
 
 # Parameters and display names
 PARAMETERS = [
@@ -25,7 +26,56 @@ PARAMETER_TITLES = [
     "Average Percent of Matches from Signaled Applicants",
 ]
 
-# TODO: UPDATE TO SPECIFIC PROGRAMS FOR THE HUGE GRAPH
+# Programs (CSV stems) to include in the joint (multi-scenario) overlay graphs
+# - Set to None to include *all* programs found in INPUT_FILES
+# - Otherwise, provide a list, prefix is colname 
+# ['vascular_surgery', 'general_surgery', ...]
+MULTI_GRAPH_PROGRAMS = [
+    'Anesthesiology',
+    'Dermatology',
+    'Emergency Medicine',
+    'Family Medicine',
+    'Internal Medicine(Categorical)',
+    'Neurology',
+    'Obstetrics-Gynecology',
+    'Orthopaedic Surgery',
+    'Pediatrics(Categorical)',
+    'Psychiatry',
+    'Radiology-Diagnostic',
+    'Surgery(Categorical)',
+]
+
+all_programs = [
+    'Anesthesiology',
+    'Child Neurology',
+    'Dermatology',
+    'Emergency Medicine',
+    'Family Medicine',
+    'Internal Medicine(Categorical)',
+    'Medicine-Emergency Med',
+    'Medicine-Pediatrics',
+    'Medicine-Preliminary(PGY-1 Only)',
+    'Medicine-Primary',
+    'Interventional Radiology(Integrated)',
+    'Neurological Surgery',
+    'Neurology',
+    'Obstetrics-Gynecology',
+    'Orthopaedic Surgery',
+    'Otolaryngology',
+    'Pathology',
+    'Pediatrics(Categorical)',
+    'Pediatrics-Primary',
+    'Physical Medicine & Rehab',
+    'Plastic Surgery(Integrated)',
+    'Psychiatry',
+    'Radiology-Diagnostic',
+    'Surgery(Categorical)',
+    'Surgery-Preliminary(PGY-1 Only)',
+    'Thoracic Surgery',
+    'Transitional(PGY-1 Only)',
+    'Vascular Surgery'
+]
+
 
 # -------------------------------------------------------------------
 # Plotting style
@@ -55,7 +105,6 @@ def load_data():
     """
     Returns: list[(Path, str)] of (csv_path, label)
     """
-    GRAPH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     if not INPUT_FILES.exists():
         raise FileNotFoundError(
@@ -216,6 +265,10 @@ def _tick_step(n: int, max_ticks: int = 20) -> int:
 
 
 def main():
+    # Ensure output directories exist
+    JOINT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    INDIVIDUAL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
     # Load and summarize each scenario
     scenario_summaries = []
     all_signal_values = set()
@@ -225,7 +278,7 @@ def main():
         signals, summary = summarize_file(csv_path)
         all_signal_values.update(signals)
 
-        scenario_dir = GRAPH_OUTPUT_DIR / label
+        scenario_dir = INDIVIDUAL_OUTPUT_DIR / label
         scenario_dir.mkdir(parents=True, exist_ok=True)
 
         scenario_summaries.append(
@@ -245,76 +298,108 @@ def main():
     # Color cycle for scenarios
     cmap = plt.get_cmap("tab10")
     colors = [cmap(i % 10) for i in range(len(scenario_summaries))]
+    label_to_color = {s["label"]: colors[i] for i, s in enumerate(scenario_summaries)}
 
+
+    # ---------------------------------------------------------------
     # ---------------------------------------------------------------
     # 1) Per-parameter overlay plots across scenarios
+    #    (joint 'multi-graph' output)
     # ---------------------------------------------------------------
+    # Optionally limit which scenarios/programs appear on the joint overlay plots.
+    if MULTI_GRAPH_PROGRAMS:
+        wanted = set(MULTI_GRAPH_PROGRAMS)
+        joint_summaries = [s for s in scenario_summaries if s["label"] in wanted]
+        missing = sorted(wanted - {s["label"] for s in joint_summaries})
+        if missing:
+            warnings.warn(
+                "MULTI_GRAPH_PROGRAMS contains labels not found in INPUT_FILES: " + ", ".join(missing),
+                RuntimeWarning,
+            )
+    else:
+        joint_summaries = scenario_summaries
+
     for param, title in zip(PARAMETERS, PARAMETER_TITLES):
         fig, ax = plt.subplots(figsize=(6, 4))
+        try:
+            # Multi-graph should *not* show signal value 0.
+            nonzero_mask = (unified_signals != 0)
+            x_plot = unified_signals[nonzero_mask]
 
-        for idx, scenario in enumerate(scenario_summaries):
-            stats_param = scenario["summary"][param]
-            sigs = stats_param["signals"]
-            mean = stats_param["mean"]
-            lo = stats_param["ci_low"]
-            hi = stats_param["ci_high"]
+            for scenario in joint_summaries:
+                stats_param = scenario["summary"][param]
+                sigs = stats_param["signals"]
+                mean = stats_param["mean"]
+                lo = stats_param["ci_low"]
+                hi = stats_param["ci_high"]
 
-            # Reindex scenario data onto the unified signal grid
-            full_mean = np.full_like(unified_signals, np.nan, dtype=float)
-            full_lo = np.full_like(unified_signals, np.nan, dtype=float)
-            full_hi = np.full_like(unified_signals, np.nan, dtype=float)
+                # Reindex scenario data onto the unified signal grid
+                full_mean = np.full_like(unified_signals, np.nan, dtype=float)
+                full_lo = np.full_like(unified_signals, np.nan, dtype=float)
+                full_hi = np.full_like(unified_signals, np.nan, dtype=float)
 
-            for s, m, l, h in zip(sigs, mean, lo, hi):
-                j = sig_to_idx[int(s)]
-                full_mean[j] = m
-                full_lo[j] = l
-                full_hi[j] = h
+                for s, m, l, h in zip(sigs, mean, lo, hi):
+                    j = sig_to_idx[int(s)]
+                    full_mean[j] = m
+                    full_lo[j] = l
+                    full_hi[j] = h
 
-            color = colors[idx]
-            label = scenario["label"]
+                color = label_to_color.get(scenario["label"], None)
+                label = scenario["label"]
 
-            ax.plot(
-                unified_signals,
-                full_mean,
-                color=color,
-                linewidth=2,
-                marker="o",
-                label=label,
+                y_mean = full_mean[nonzero_mask]
+                y_lo = full_lo[nonzero_mask]
+                y_hi = full_hi[nonzero_mask]
+
+                # Line (exclude 0 entirely)
+                if np.isfinite(y_mean).any():
+                    ax.plot(
+                        x_plot,
+                        y_mean,
+                        color=color,
+                        linewidth=2,
+                        marker="o",
+                        label=label,
+                    )
+
+                # CI band (exclude 0 entirely)
+                finite_ci = np.isfinite(y_lo) & np.isfinite(y_hi)
+                if finite_ci.any():
+                    ax.fill_between(
+                        x_plot,
+                        y_lo,
+                        y_hi,
+                        where=finite_ci,
+                        color=color,
+                        alpha=0.15,
+                    )
+
+            ax.set_xlabel("Number of Signals")
+            ax.set_ylabel(title)
+            ax.set_title(f"{title} vs Number of Signals")
+
+            step = _tick_step(len(x_plot), max_ticks=18)
+            if len(x_plot) > 0:
+                ax.set_xticks(x_plot[::step])
+
+            ax.grid(True, alpha=0.3, linestyle="--")
+            ax.legend(
+                frameon=False,
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),  # just outside the right edge
+                borderaxespad=0.0,
             )
-            finite_ci = np.isfinite(full_lo) & np.isfinite(full_hi)
-            ax.fill_between(
-                unified_signals,
-                full_lo,
-                full_hi,
-                where=finite_ci,
-                color=color,
-                alpha=0.15,
-            )
-
-        ax.set_xlabel("Number of Signals")
-        ax.set_ylabel(title)
-        ax.set_title(f"{title} vs Number of Signals")
-
-        step = _tick_step(len(unified_signals), max_ticks=18)
-        ax.set_xticks(unified_signals[::step])
-
-        ax.grid(True, alpha=0.3, linestyle="--")
-        ax.legend(
-            frameon=False,
-            loc="center left",
-            bbox_to_anchor=(1.02, 0.5),   # just outside the right edge
-            borderaxespad=0.0,
-        )
-        fig.tight_layout(rect=[0, 0, 0.78, 1])  # leave space on the right for legend
-        out_png = GRAPH_OUTPUT_DIR / f"multi_{param.lower()}_overlay.png"
-        fig.savefig(out_png, bbox_inches="tight")
-        plt.close(fig)
+            fig.tight_layout(rect=[0, 0, 0.78, 1])  # leave space on the right for legend
+            out_png = JOINT_OUTPUT_DIR / f"multi_{param.lower()}_overlay.png"
+            fig.savefig(out_png, bbox_inches="tight")
+        finally:
+            plt.close(fig)
 
     # ---------------------------------------------------------------
     # 1b) Per-scenario plots (saved per scenario)
     # ---------------------------------------------------------------
     for scenario in scenario_summaries:
-        out_dir = scenario["directory"]
+        out_dir = INDIVIDUAL_OUTPUT_DIR / scenario["label"]
         out_dir.mkdir(parents=True, exist_ok=True)
 
         for param, title in zip(PARAMETERS, PARAMETER_TITLES):
@@ -325,26 +410,57 @@ def main():
             hi = stats_param["ci_high"]
 
             fig, ax = plt.subplots(figsize=(6, 4))
-            ax.plot(sigs, mean, linewidth=2, marker="o")
-            finite_ci = np.isfinite(lo) & np.isfinite(hi)
-            ax.fill_between(sigs, lo, hi, where=finite_ci, alpha=0.15)
+            try:
+                is_zero = (sigs == 0)
+                is_nonzero = ~is_zero
 
-            ax.set_xlabel("Number of Signals")
-            ax.set_ylabel(title)
-            ax.set_title(f"{scenario['label']}: {title} vs Number of Signals")
+                # Don't connect 0 to the rest of the line
+                if np.isfinite(mean[is_nonzero]).any():
+                    ax.plot(sigs[is_nonzero], mean[is_nonzero], linewidth=2, marker="o")
 
-            step = _tick_step(len(sigs), max_ticks=18)
-            if len(sigs) > 0:
-                ax.set_xticks(sigs[::step])
+                # CI band (do not draw CI at 0)
+                lo_plot = lo.copy()
+                hi_plot = hi.copy()
+                lo_plot[is_zero] = np.nan
+                hi_plot[is_zero] = np.nan
+                finite_ci = np.isfinite(lo_plot) & np.isfinite(hi_plot)
+                if finite_ci.any():
+                    ax.fill_between(sigs, lo_plot, hi_plot, where=finite_ci, alpha=0.15)
 
-            ax.grid(True, alpha=0.3, linestyle="--")
+                # Red circled 0 point + legend label
+                no_signal_plotted = False
+                if is_zero.any() and np.isfinite(mean[is_zero]).any():
+                    ax.scatter(
+                        sigs[is_zero],
+                        mean[is_zero],
+                        s=90,
+                        facecolors="none",
+                        edgecolors="red",
+                        linewidths=2,
+                        zorder=6,
+                        label="No Signaling",
+                    )
+                    no_signal_plotted = True
 
-            fig.tight_layout()
-            out_png = out_dir / f"{param.lower()}.png"
-            fig.savefig(out_png, bbox_inches="tight")
-            plt.close(fig)
+                if no_signal_plotted:
+                    ax.legend(frameon=False, loc="best")
 
-    # ---------------------------------------------------------------
+                ax.set_xlabel("Number of Signals")
+                ax.set_ylabel(title)
+                ax.set_title(f"{scenario['label']}: {title} vs Number of Signals")
+
+                step = _tick_step(len(sigs), max_ticks=18)
+                if len(sigs) > 0:
+                    ax.set_xticks(sigs[::step])
+
+                ax.grid(True, alpha=0.3, linestyle="--")
+
+                fig.tight_layout()
+                out_png = out_dir / f"{param.lower()}.png"
+                fig.savefig(out_png, bbox_inches="tight")
+            finally:
+                plt.close(fig)
+
     # 2) Summary bar charts: optimal signal per scenario
     #    (minimizing mean number of reviews)
     # ---------------------------------------------------------------
@@ -391,7 +507,7 @@ def main():
         ax.set_ylim(0, ymax)
 
     fig.tight_layout()
-    out_png = GRAPH_OUTPUT_DIR / "multi_optimal_signals_num_reviews.png"
+    out_png = JOINT_OUTPUT_DIR / "multi_optimal_signals_num_reviews.png"
     fig.savefig(out_png, bbox_inches="tight")
     plt.close(fig)
 

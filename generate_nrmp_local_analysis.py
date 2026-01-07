@@ -4,13 +4,13 @@ import pandas as pd
 # the goal of this is to just do a local analysis around the NRMP variables
 # where we randomize max applications and interviews per spot
 
-EXPORT_FILE_PATH = 'NRMP/local_nrmp_analysis_constants.csv'
+EXPORT_FILE_PATH = 'constants/local_nrmp_analysis_constants.csv'
 SIMULATIONS_PER_S = 10 
 SIGNAL_MAX = 40
 LOCAL_SETS_PER_NRMP = 20 # how many sets to attempt to generate
 
 # https: // www.nrmp.org/wp-content/uploads/2025/05/Main_Match_Results_and_Data_20250529_FINAL.pdf
-nrmp_data = pd.read_csv('NRMP/constants_nrmp.csv')
+nrmp_data = pd.read_csv('constants/constants_nrmp.csv')
 
 
 out = []

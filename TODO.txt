@@ -1,2 +1,2 @@
-1. Graphing/results
-2. Better ML model
+1. Graphing if a few key programs and per signal value
+2. ML model

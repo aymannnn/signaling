@@ -22,7 +22,6 @@ apply above or below OR if there is a remainder from division by 4, those applic
 go to their own quartile.
 '''
 
-from typing import List
 import numpy as np
 import pandas as pd
 import os
@@ -36,16 +35,21 @@ USE_PARALLEL = "--no-parallel" not in sys.argv  # default: parallel
 PRINT_ALL_DATA = True
 
 # sensitivity analyses 
-GAMMA_MAX_APPLICATIONS = False
+GAMMA_MAX_APPLICATIONS = True
+NO_QUARTILE = False
 GAMMA_SHAPE = 8.0
 GAMMA_SCALE = 30 / 8  # mean of 30 applications
-NO_QUARTILE = True
+
+if NO_QUARTILE:
+    print("NO QUARTILE SENSITIVITY ANALYSIS")
+if GAMMA_MAX_APPLICATIONS:
+    print("GAMMA MAX APPLICATIONS SENSITIVITY ANALYSIS")
 
 # file paths, commented/uncommented for convenience
 
 # ----------- BASE CASE HEATMAP 
 
-# HEATMAP_RESULTS_PATH = 'results/heatmap_results_base_case.csv'
+# HEATMAP_RESULTS_PATH = 'results/base_case.csv'
 # ALL_DATA_PATH = 'results/all_data_base_case/'
 # CONSTANTS_PATH = 'constants/base_case.csv'
 
@@ -53,6 +57,24 @@ NO_QUARTILE = True
 
 # HEATMAP_RESULTS_PATH = 'results/nrmp_results.csv'
 # ALL_DATA_PATH = 'results/all_data_nrmp/'
+# CONSTANTS_PATH = 'constants/constants_nrmp.csv'
+
+# ----------- NRMP WITH GAMMA APPLICATIONS
+
+HEATMAP_RESULTS_PATH = 'results/nrmp_results_gamma.csv'
+ALL_DATA_PATH = 'results/all_data_nrmp_gamma/'
+CONSTANTS_PATH = 'constants/constants_nrmp.csv'
+
+# ----------- NRMP WITH NO QUARTILE
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_results_no_quartile.csv'
+# ALL_DATA_PATH = 'results/all_data_nrmp_no_quartile/'
+# CONSTANTS_PATH = 'constants/constants_nrmp.csv'
+
+# ----------- NRMP WITH NO QUARTILE AND GAMMA APPLICATIONS
+
+# HEATMAP_RESULTS_PATH = 'results/nrmp_results_no_quartile_gamma.csv'
+# ALL_DATA_PATH = 'results/all_data_nrmp_no_quartile_gamma/'
 # CONSTANTS_PATH = 'constants/constants_nrmp.csv'
 
 # ----------- LOCAL NRMP ANALYSIS
@@ -75,9 +97,9 @@ NO_QUARTILE = True
 
 # ----------- NRMP LOCAL ANALYSIS NO QUARTILE WITH GAMMA
 
-HEATMAP_RESULTS_PATH = 'NRMP/nrmp_local_analysis_no_quartile_gamma_results.csv'
-ALL_DATA_PATH = 'NRMP/all_data_local_analysis_no_quartile_gamma/'
-CONSTANTS_PATH = 'NRMP/local_nrmp_analysis_constants.csv'
+# HEATMAP_RESULTS_PATH = 'NRMP/nrmp_local_analysis_no_quartile_gamma_results.csv'
+# ALL_DATA_PATH = 'NRMP/all_data_local_analysis_no_quartile_gamma/'
+# CONSTANTS_PATH = 'NRMP/local_nrmp_analysis_constants.csv'
 
 
 # there is a better way to do this but for now keep
@@ -283,6 +305,9 @@ class Applicant:
             available_programs = [
                 p.id for p in all_programs if p not in already_chosen_programs]
             # pick randomly from available
+            # length = min(length, len(available_programs))
+            if length > len(available_programs):
+                length = len(available_programs)
             program_choices = np.random.choice(
                 available_programs, size = length, replace = False)
             for choice in program_choices:

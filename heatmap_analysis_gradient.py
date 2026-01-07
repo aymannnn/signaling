@@ -300,13 +300,12 @@ LABELS = {
 # Imports + load
 # ==============
 
-INPUT_PATH = "heatmap_results/heatmap_results.csv"
-OUTPUT_DIRECTORY = "heatmap_figures/"
+INPUT_PATH = "results/base_case.csv"
+OUTPUT_DIRECTORY = "figures/base_case/"
 
 df = pd.read_csv(INPUT_PATH)
 print("Loaded:", df.shape)
 df.head(5)
-
 
 # Run heatmap settings:
 # note that the save path will auto-prefix the OUTPUT_DIRECTORY
@@ -320,12 +319,15 @@ df.head(5)
 
 # file name is the key
 
-PLOT_STYLE = "tricontour"   # one of: "binned", "scatter", "hexbin", "tricontour"
+PLOT_STYLE = "binned"   # one of: "binned", "scatter", "hexbin", "tricontour"
 # higher -> finer "pixels" (try 40–120 depending on data size)
-HEXBIN_GRIDSIZE = 40
+
+OUTPUT_DIRECTORY += PLOT_STYLE + "_"
+
+HEXBIN_GRIDSIZE = 120
 # require at least this many points per hex (filters sparse areas)
 HEXBIN_MINCNT = 1
-TRICONTOUR_LEVELS = 60  # higher -> smoother contours (but can overfit)
+TRICONTOUR_LEVELS = 10  # higher -> smoother contours (but can overfit)
 
 graphs_to_create= {
     # graph heatmaps with variable being optimal signals 
@@ -347,7 +349,7 @@ graphs_to_create= {
         "title": "Optimal Signal Heat-Map: Applicants per Position vs. Interviews per Spot",
         "agg": "median",
         "binning": {
-            "x": {"bins": 4, "method": "qcut", "decimals": 0},
+            "x": {"bins": 4, "method": "qcut", "decimals": 2},
             "y": {"bins": 4, "method": "qcut", "decimals": 0},
         }
     },
@@ -356,41 +358,6 @@ graphs_to_create= {
         "y": "max_applications",
         "heatmap_variable": "best_signal_rpp",
         "title": "Optimal Signal Heat-Map: Applicants per Position vs. Maximum Applications",
-        "agg": "median",
-        "binning": {
-            "x": {"bins": 4, "method": "qcut", "decimals": 0},
-            "y": {"bins": 4, "method": "qcut", "decimals": 0},
-        }
-    },
-    # graph heatmaps with variable being reviews per program at optimal signal
-
-    "app_vs_pos_rpp": {
-        "x": "n_applicants",
-        "y": "simulated_positions",
-        "heatmap_variable": "reviews_per_program_best_rpp",
-        "title": "Reviews per Program Heat-Map: Applicants vs. Number of Positions",
-        "agg": "median",
-        "binning": {
-            "x": {"bins": 4, "method": "qcut", "decimals": 0},
-            "y": {"bins": 4, "method": "qcut", "decimals": 0},
-        }
-    },
-    "aperp_vs_interviews_per_spot_rpp": {
-        "x": "applicants_per_position",
-        "y": "interviews_per_spot",
-        "heatmap_variable": "reviews_per_program_best_rpp",
-        "title": "Reviews per Program Heat-Map: Applicants per Position vs. Interviews per Spot",
-        "agg": "median",
-        "binning": {
-            "x": {"bins": 4, "method": "qcut", "decimals": 0},
-            "y": {"bins": 4, "method": "qcut", "decimals": 0},
-        }
-    },
-    "aprep_vs_max_applications_rpp": {
-        "x": "applicants_per_position",
-        "y": "max_applications",
-        "heatmap_variable": "reviews_per_program_best_rpp",
-        "title": "Reviews per Program Heat-Map: Applicants per Position vs. Maximum Applications",
         "agg": "median",
         "binning": {
             "x": {"bins": 4, "method": "qcut", "decimals": 0},
