@@ -20,15 +20,22 @@ https: // www.nrmp.org/wp-content/uploads/2025/05/Main_Match_Results_and_Data_20
 
 ## Running the Model
 
-The whole simulation is contained in simulation.py. You must manually set the analyses you want to run using the analysis_settings.csv. You may also directly set analyses to run in the simulation.py file (top)
+The whole simulation is contained in simulation.py. You must manually set the analyses you want to run using the analysis_settings.csv. There are some important flags, if you add a boolean flag you msut update the __main__ function to properly parse it. Flags:
+
+1. GAMMA_MAX_APPLICATIONS - randomized number of applications sent by each applicant
+2. NO_QUARTILE - assume applicants apply totally randomly instead of by their quartile
+3. WIPE_DATA - clean out all analysis data
+4. RUN_ANALYSIS - 0 will skip that analysis when you run the file
+5. RAND_APP_RANK_LIST_ORDER - randomize the applicant final rank list (i.e. don't respect program index/rank)
+6. RAND_PROG_RANK_LIST_ORDER - randomize the program final rank list (i.e. don't respect applicant index/rank)
 
 ## Repository Structure
+## TODO: UPDATE FROM HERE
 
 1. constants_settings/: simple folder to save your constant settings if you'd like. The base case settings are stored here
 2. simulation_results/: the simulation and graphs will default to this location. all other folders are just for study results of specific subsets.
-3. profiling.txt: instructions on how to profile the code/what commands to run
-4. constants.csv: constants for your simulation run, will always read from here
-5. simulation.py/data_analysis.py: simulation and graphing of results, respectively
+3. constants.csv: constants for your simulation run, will always read from here
+4. simulation.py/data_analysis.py: simulation and graphing of results, respectively
 
 ## Simulation
 

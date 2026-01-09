@@ -4,6 +4,8 @@ applicants choose programs, programs choose applicants, and the match algorithm
 is run :). 
 '''
 
+import shutil
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import random
@@ -30,7 +32,6 @@ HEATMAP_RESULTS_COLUMNS = [
     'applicants_per_position',
     'minimum_unmatched',
     'spots_per_program',
-    'simulated_positions',
     'simulations_per_s',
     'study_min_signal',
     'study_max_signal',
@@ -167,6 +168,7 @@ class Applicant:
     n_non_signals = int(-1)
     gamma_max_applications = False
     no_quartile = False
+    RAND_APP_RANK_LIST_ORDER = False
 
     # class method to update signal numbers
     @classmethod
@@ -174,15 +176,13 @@ class Applicant:
         cls.n_signals = signal_number
         cls.n_non_signals = cls.n_applications - signal_number
         
+
     @classmethod
-    def update_analysis_settings(
-        cls, 
-        gamma:bool, 
-        no_quartile:bool):
-        if gamma:
-            cls.gamma_max_applications = True
-        if no_quartile:
-            cls.no_quartile = True
+    def update_analysis_settings(cls, gamma: bool, no_quartile: bool, rand_app_list_order: bool):
+        cls.gamma_max_applications = bool(gamma)
+        cls.no_quartile = bool(no_quartile)
+        cls.RAND_APP_RANK_LIST_ORDER = bool(rand_app_list_order)
+
 
     def get_quartile(self):
         return quartile_from_index(self.id, self.n_applicants)
@@ -240,7 +240,7 @@ class Applicant:
         
         if Applicant.no_quartile:
             available_programs = [
-                p.id for p in all_programs if p not in already_chosen_programs]
+                p.id for p in all_programs if p.id not in already_chosen_programs]
             # pick randomly from available
             # length = min(length, len(available_programs))
             if length > len(available_programs):
@@ -366,11 +366,19 @@ class Applicant:
         self.non_signaled_programs = self.pick_programs(
             programs, program_quartile_list, False, gamma_simulation_data
         )
-        self.signaled_programs.sort()  # sort in ascending order
-        self.non_signaled_programs.sort()  # sort in ascending order
+                
+        if Applicant.RAND_APP_RANK_LIST_ORDER:
+            # shuffle in place
+            random.shuffle(self.signaled_programs)
+            random.shuffle(self.non_signaled_programs)
+        else:
+            self.signaled_programs.sort()  # sort in ascending order
+            self.non_signaled_programs.sort()  # sort in ascending order
+            
         # note that final rank list is
         # signaled programs followed by non-signaled programs, just to give
         # a sense of "reality" with signals being prioritized
+        # NOTE: this final rank list 
         self.final_rank_list = (
             self.signaled_programs + self.non_signaled_programs
         )
@@ -389,21 +397,18 @@ class Program:
         "reviewed_applications",
         "final_rank_list",
         "tentative_matches",
+        "n_positions",
+        "n_interviews",
         "rank_index",    # added in stable_match
     )
 
-    spots_per_program = int(-1)
-    num_interviews = int(-1)
     RAND_PROG_RANK_LIST_ORDER = False
     
+
     @classmethod
-    def update_analysis_settings(
-        cls,
-        random_prog_rank_list_order:bool
-    ):
-        if random_prog_rank_list_order:
-            cls.RAND_PROG_RANK_LIST_ORDER = True
-        return
+    def update_analysis_settings(cls, random_prog_rank_list_order: bool):
+        cls.RAND_PROG_RANK_LIST_ORDER = bool(random_prog_rank_list_order)
+
 
     def get_quartile(self, constants):
         return quartile_from_index(self.id, int(constants["n_programs"]))
@@ -434,31 +439,36 @@ class Program:
         # behavior for random program list orders
         
         if Program.RAND_PROG_RANK_LIST_ORDER:
-            signal_list = random.shuffle(self.received_signals)
+            # shuffle IN PLACE
+            random.shuffle(self.received_signals)
+            signal_list = list(self.received_signals)
         else:
             signal_list = sorted(self.received_signals)
         
-        if len(self.received_signals) >= self.num_interviews:
-            self.final_rank_list = signal_list[0:self.num_interviews]
+        if len(self.received_signals) >= self.n_interviews:
+            self.final_rank_list = signal_list[0:self.n_interviews]
         else:
-            remaining_spots = self.num_interviews - len(self.received_signals)
-            # TODO: can relax this assumption of having to review everybody
-            # if you don't fill with signals with what Bruce and I chatted
-            # about regarding some greedy parallel optimization
+            remaining_spots = self.n_interviews - len(self.received_signals)
+            # IMPORTANT: can relax this assumption of having to review everybody
+            # if you don't fill with signals
+            # can do some greedy optimization but really it doesn't
+            # make a difference for local minimum
             self.reviewed_applications += len(self.received_no_signals)
             # final rank list always prioritizes signals
             no_signal_list = []
             if Program.RAND_PROG_RANK_LIST_ORDER:
                 # randomize order they are added on
-                no_signal_list = random.shuffle(self.received_no_signals)
+                random.shuffle(self.received_no_signals)
             else:
                 no_signal_list = sorted(self.received_no_signals)    
             self.final_rank_list = (
                 signal_list +
                 no_signal_list[0:remaining_spots])
 
-    def __init__(self, id_index, constants):
+    def __init__(self, id_index, constants, positions):
         self.id = id_index
+        self.n_positions = positions
+        self.n_interviews = self.n_positions * constants['interviews_per_spot']
         self.quartile = self.get_quartile(constants)
         self.received_signals = []
         self.received_no_signals = []
@@ -537,15 +547,21 @@ def stable_match(applicants: list, programs: list):
         program.tentative_matches.append(applicant_id)
 
         # Sort by program’s preference
+        # NOTE: For the case where the program randomly ranks applicants, we 
+        # don't have to change anything since the program.final_rank_list
+        # is already shuffled
+        # HOWEVER IT does STILL prioritize signals over non-signals
         program.tentative_matches.sort(
             key=lambda aid: program.rank_index[aid]
         )
 
         # Keep only best spots_per_program applicants if over capacity
         # program always prefers best applicants
-        if len(program.tentative_matches) > program.spots_per_program:
-            rejected = program.tentative_matches[program.spots_per_program:]
-            program.tentative_matches = program.tentative_matches[:program.spots_per_program]
+        if len(program.tentative_matches) > program.n_positions:
+            # rejected is from n_postions : to end of list
+            rejected = program.tentative_matches[program.n_positions:]
+            # matches is start of list to : n positions
+            program.tentative_matches = program.tentative_matches[:program.n_positions]
 
             # Rejected applicants become free again
             for rej in rejected:
@@ -638,18 +654,43 @@ def post_match_analysis(applicants: list, programs: list) -> dict:
     )
     for program in programs:
         filled_spots = len(program.tentative_matches)
-        unfilled_spots += program.spots_per_program - filled_spots
+        unfilled_spots += program.n_positions - filled_spots
 
     post_match_counts['unfilled_spots'] = unfilled_spots
     
     return post_match_counts
 
 
+def _get_positions_per_program(constants):
+    n_positions = constants['n_positions']
+    n_programs = constants['n_programs']
+    base = n_positions // n_programs
+    remainder = n_positions - base*n_programs
+    positions_per_program = [base for _ in range(n_programs)]
+    if remainder == 0:
+        return positions_per_program
+    # select remainder number of ids from program_ids without replacement
+    # sample does a unique pull
+    programs_to_add_one = random.sample(
+        range(n_programs), k = remainder)
+    for program in programs_to_add_one:
+        positions_per_program[program] += 1
+    return positions_per_program
+    
+
 def run_simulation(s, constants, gamma_simulation_data={}):
-    # 12/15: change this to a dict instead of this triple
     results = {}
     program_quartile_list = get_quartile_dict(constants['n_programs'])
-    programs = [Program(j, constants) for j in range(constants['n_programs'])]
+    # in the refactoring for each program to have an independent number of
+    # positions and thus interviews to offer, we must
+    # change the initialization here
+
+    positions_per_program = _get_positions_per_program(constants)     
+    programs = [
+        Program(
+            j, constants, positions_per_program[j] # the index gets to how many
+            # positions that program has
+            ) for j in range(constants['n_programs'])]
     applicants = [
         Applicant(i, 
                   programs, 
@@ -660,10 +701,14 @@ def run_simulation(s, constants, gamma_simulation_data={}):
         program.create_final_rank_list_and_count_reviews()
     total_reviews = sum(
         [program.reviewed_applications for program in programs])
-    total_reviews_per_program = total_reviews / constants['n_programs']
-    results['reviews_per_program'] = total_reviews_per_program
+    avg_reviews_per_program = total_reviews / constants['n_programs']
+    results['reviews_per_program'] = avg_reviews_per_program
     
     # now also calculate the applicant interviews received
+    # TODO: One day maybe it is worth recording this data
+    # but we do some calculations on it 
+    # ultimately could probably JUST store matched programs, signals,
+    # and non-signals, and that would tell all results ...
     for program in programs:
         for app_id in program.final_rank_list:
             applicants[app_id].interviews_received.append(program.id)
@@ -809,6 +854,17 @@ def process_simulation_heatmap(
     return pd.DataFrame([final_dataframe])
 
 
+def _init_worker(gamma_max_applications: bool,
+                 no_quartile: bool,
+                 rand_app_rank_list_order: bool,
+                 rand_prog_rank_list_order: bool):
+    # Ensure each worker process has the same analysis-mode settings as the parent.
+    Applicant.gamma_max_applications = bool(gamma_max_applications)
+    Applicant.no_quartile = bool(no_quartile)
+    Applicant.RAND_APP_RANK_LIST_ORDER = bool(rand_app_rank_list_order)
+    Program.RAND_PROG_RANK_LIST_ORDER = bool(rand_prog_rank_list_order)
+
+
 def _simulate_for_signal(
         constants: pd.Series,
         signal_value: int,
@@ -825,10 +881,8 @@ def _simulate_for_signal(
     """
     if seed is not None:
         np.random.seed(seed)
+        random.seed(seed)
 
-    Program.spots_per_program = constants['spots_per_program']
-    Program.num_interviews = (
-        constants['interviews_per_spot']*constants['spots_per_program'])
     Applicant.n_applicants = constants['n_applicants']
     
     # base case scenario OK to set max applications and
@@ -914,7 +968,15 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
     from concurrent.futures import ProcessPoolExecutor
 
     # One process pool reused across all batches
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(
+        initializer=_init_worker,
+        initargs=(
+            Applicant.gamma_max_applications,
+            Applicant.no_quartile,
+            Applicant.RAND_APP_RANK_LIST_ORDER,
+            Program.RAND_PROG_RANK_LIST_ORDER,
+        ),
+    ) as executor:
         for i in range(CONSTANTS['simulations_per_s']):
             print(
                 f"Starting simulation batch {i+1} of "
@@ -982,6 +1044,28 @@ def _makedirs_with_msg(path: str, label: str) -> bool:
     return True
 
 
+def _empty_dir_with_msg(dir_path: str, label: str) -> bool:
+    """
+    Deletes all contents of dir_path (files + subdirs), keeps the directory.
+    Returns True if anything was deleted.
+    """
+    p = Path(dir_path)
+    if not p.exists():
+        return False
+
+    deleted_any = False
+    for child in p.iterdir():
+        deleted_any = True
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+    if deleted_any:
+        print(f"Emptied {label}: {dir_path}")
+    return deleted_any
+
+
 def check_analysis_directories(analysis_settings) -> int:
     created_any = False
 
@@ -993,6 +1077,10 @@ def check_analysis_directories(analysis_settings) -> int:
     # ALL_DATA_EXPORT_PATH is a directory -> ensure it exists
     export_dir = analysis_settings["ALL_DATA_EXPORT_PATH"]
     created_any |= _makedirs_with_msg(export_dir, "ALL_DATA_EXPORT_PATH")
+
+    # If WIPE_DATA: empty export directory contents
+    if analysis_settings.get("WIPE_DATA", False):
+        _empty_dir_with_msg(export_dir, "ALL_DATA_EXPORT_PATH contents")
 
     # CONSTANTS_PATH is a file -> ensure parent dir exists, then require file exists
     constants_file = analysis_settings["CONSTANTS_PATH"]
@@ -1012,7 +1100,6 @@ def check_analysis_directories(analysis_settings) -> int:
     )
     return 0
 
-
 def run_analysis(analysis_settings):
     
     viable_analysis = check_analysis_directories(analysis_settings)
@@ -1027,7 +1114,8 @@ def run_analysis(analysis_settings):
     # update whole class for these settings
     Applicant.update_analysis_settings(
         analysis_settings['GAMMA_MAX_APPLICATIONS'],
-        analysis_settings['NO_QUARTILE']
+        analysis_settings['NO_QUARTILE'],
+        analysis_settings['RAND_APP_RANK_LIST_ORDER']
     )
     Program.update_analysis_settings(
         analysis_settings['RAND_PROG_RANK_LIST_ORDER']
@@ -1040,8 +1128,7 @@ def run_analysis(analysis_settings):
 
     heatmaps_not_in_constants = already_run_heatmaps - unique_constants
     print(
-        f"Number of heatmaps not in current constants file: {
-            len(heatmaps_not_in_constants)}.")
+        f"Number of heatmaps not in current constants file: {len(heatmaps_not_in_constants)}.")
     
     to_run_constants = unique_constants - already_run_heatmaps
     
@@ -1077,8 +1164,7 @@ def run_analysis(analysis_settings):
                 [simulation_data, processed_results], 
                 ignore_index=True)
         if iteration % 5 == 0:
-            print(f"Completed {
-                iteration} constant sets. Exporting interim results.")
+            print(f"Completed {iteration} constant sets. Exporting interim results.")
             simulation_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
     simulation_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
 
@@ -1104,7 +1190,9 @@ if __name__ == "__main__":
         "GAMMA_MAX_APPLICATIONS", 
         "NO_QUARTILE",
         "WIPE_DATA", 
-        "RUN_ANALYSIS"]:
+        "RUN_ANALYSIS",
+        "RAND_APP_RANK_LIST_ORDER",
+        "RAND_PROG_RANK_LIST_ORDER"]:
         analysis_settings[col] = analysis_settings[col].map(to_bool)
     
     # the other variables will be strings by default
@@ -1112,8 +1200,8 @@ if __name__ == "__main__":
     for index, row in analysis_settings.iterrows():
         settings = row.to_dict()
         if settings['RUN_ANALYSIS'] is False:
-            print(f'Will not run {settings['ANALYSIS_NAME']} as specified in analysis_settings.csv')
+            print(f"Will not run {settings['ANALYSIS_NAME']} as specified in analysis_settings.csv")
             continue
         print(
-            f'Running the - {settings['ANALYSIS_NAME']} - analysis. Gamma - {settings['GAMMA_MAX_APPLICATIONS']}. No Quartile - {settings['NO_QUARTILE']}')        
+            f"Running analysis: {settings['ANALYSIS_NAME']}.")        
         run_analysis(settings)
