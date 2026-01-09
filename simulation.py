@@ -146,6 +146,9 @@ def quartile_from_index(idx: int, n: int) -> int:
         return 4
 
 class Applicant:
+    
+    # NOTE TO SELF - REMEMBER TO ADD ALL CLASS LEVEL OBJECTS TO
+    # _SIMULATE_FOR_SIGNAL OR ELSE PARALLEL WILL BREAK
 
     # add slots to prevent memory with __dict__ and many instances of
     # applicant and program
@@ -402,6 +405,9 @@ class Program:
         "rank_index",    # added in stable_match
     )
 
+    # NOTE TO SELF - REMEMBER TO ADD ALL CLASS LEVEL OBJECTS TO
+    # _SIMULATE_FOR_SIGNAL OR ELSE PARALLEL WILL BREAK
+
     RAND_PROG_RANK_LIST_ORDER = False
     
 
@@ -459,6 +465,7 @@ class Program:
             if Program.RAND_PROG_RANK_LIST_ORDER:
                 # randomize order they are added on
                 random.shuffle(self.received_no_signals)
+                no_signal_list = self.received_no_signals
             else:
                 no_signal_list = sorted(self.received_no_signals)    
             self.final_rank_list = (
@@ -854,24 +861,13 @@ def process_simulation_heatmap(
     return pd.DataFrame([final_dataframe])
 
 
-def _init_worker(gamma_max_applications: bool,
-                 no_quartile: bool,
-                 rand_app_rank_list_order: bool,
-                 rand_prog_rank_list_order: bool):
-    # Ensure each worker process has the same analysis-mode settings as the parent.
-    Applicant.gamma_max_applications = bool(gamma_max_applications)
-    Applicant.no_quartile = bool(no_quartile)
-    Applicant.RAND_APP_RANK_LIST_ORDER = bool(rand_app_rank_list_order)
-    Program.RAND_PROG_RANK_LIST_ORDER = bool(rand_prog_rank_list_order)
-
-
 def _simulate_for_signal(
         constants: pd.Series,
         signal_value: int,
-        seed: int | None = None):
+        seed: int,
+        analysis_settings: dict):
     """
-    Pure worker - does NOT depend on globally mutable state.
-    Single simulation run for a given signal_value.
+     Single simulation run for a given signal_value.
     Did move applicant.update_signal_number inside so that each process
     is self-contained.
     
@@ -879,9 +875,18 @@ def _simulate_for_signal(
     there can be a risk with parallelizaition that multiple processes
     get the same random seed and thus produce correlated results.
     """
-    if seed is not None:
-        np.random.seed(seed)
-        random.seed(seed)
+    
+    Applicant.update_analysis_settings(
+        analysis_settings['GAMMA_MAX_APPLICATIONS'],
+        analysis_settings['NO_QUARTILE'],
+        analysis_settings['RAND_APP_RANK_LIST_ORDER']
+       )
+    Program.update_analysis_settings(
+        analysis_settings['RAND_PROG_RANK_LIST_ORDER']
+    )
+    
+    np.random.seed(seed)
+    random.seed(seed)
 
     Applicant.n_applicants = constants['n_applicants']
     
@@ -930,7 +935,9 @@ def _simulate_for_signal(
     return simulation_results
 
 
-def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
+def run_simulation_heatmap(
+    CONSTANTS: pd.Series,
+    analysis_settings: dict) -> dict:
     '''
     Runs a full heatmap simulation for a given set of CONSTANTS.
     Returns a DataFrame with the results for this constant set.
@@ -964,19 +971,12 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
     simulation_results = {
         m: np.empty((n_runs, n_signals)) for m in simulation_results_names}
 
-    # -------- PARALLEL VERSION (normal fast run) --------
+
+    # -------- PARALLEL ------
     from concurrent.futures import ProcessPoolExecutor
 
     # One process pool reused across all batches
-    with ProcessPoolExecutor(
-        initializer=_init_worker,
-        initargs=(
-            Applicant.gamma_max_applications,
-            Applicant.no_quartile,
-            Applicant.RAND_APP_RANK_LIST_ORDER,
-            Program.RAND_PROG_RANK_LIST_ORDER,
-        ),
-    ) as executor:
+    with ProcessPoolExecutor() as executor:
         for i in range(CONSTANTS['simulations_per_s']):
             print(
                 f"Starting simulation batch {i+1} of "
@@ -997,7 +997,11 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
             # each worker does the job and returns results
             futures = [
                 executor.submit(
-                    _simulate_for_signal, CONSTANTS, s_val, int(seed))
+                    _simulate_for_signal, 
+                    CONSTANTS, 
+                    s_val, 
+                    int(seed), 
+                    analysis_settings)
                 for s_val, seed in zip(signal_values, seeds)
             ]
 
@@ -1111,16 +1115,6 @@ def run_analysis(analysis_settings):
         analysis_settings['RESULTS_PATH'],
         analysis_settings['WIPE_DATA'])
     
-    # update whole class for these settings
-    Applicant.update_analysis_settings(
-        analysis_settings['GAMMA_MAX_APPLICATIONS'],
-        analysis_settings['NO_QUARTILE'],
-        analysis_settings['RAND_APP_RANK_LIST_ORDER']
-    )
-    Program.update_analysis_settings(
-        analysis_settings['RAND_PROG_RANK_LIST_ORDER']
-    )
-    
     unique_constants = set(constants['result_file_prefix'].values)
     print(f"Total unique constants provided: {len(unique_constants)}.")
     already_run_heatmaps = set(simulation_data['result_file_prefix'].values)
@@ -1141,7 +1135,7 @@ def run_analysis(analysis_settings):
     iteration = 0
     for _, CONSTANTS in to_run_constants_df.iterrows():
         iteration += 1
-        all_results = run_simulation_heatmap(CONSTANTS)
+        all_results = run_simulation_heatmap(CONSTANTS, analysis_settings)
         simulation_results = all_results['all_data']
         processed_results = all_results['processed_results']
         
@@ -1186,6 +1180,7 @@ if __name__ == "__main__":
     
     analysis_settings = pd.read_csv('analysis_settings.csv')
     
+    # NOTE: HAVE TO MANUALLY UPDATE IF ANY BINARY FLAGS ARE ADDED
     for col in [
         "GAMMA_MAX_APPLICATIONS", 
         "NO_QUARTILE",
