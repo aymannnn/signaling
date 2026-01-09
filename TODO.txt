@@ -1,2 +1,0 @@
-1. Graphing if a few key programs and per signal value
-2. ML model

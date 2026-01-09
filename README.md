@@ -1,6 +1,6 @@
 # Signaling Simulation Documentation
 
-## Quickstart
+## General Overview
 
 1. Install requirements with: 
 
@@ -8,18 +8,19 @@
 pip install -r requirements.txt
 ```
 
-2. Set your constants in constants.csv. Make sure to set the result file prefix. Results will be generated in the folder: simulation_results/
-3. Run:
-    
-```python
-python simulation.py
-```
+## Constants/Model Parameters
 
-4. To graph, first make sure you don't modify constants.csv, as the graphing functions pull the file path defined by the file prefix in constants.csv.  Simply run the following to generate graphs, will will have the same prefix as defined above:
+Model parameters are stored in the /constants/ folder. For the purposes of our simulation, we use (3) different constants: 
 
-```python
-python data_analysis.py
-```
+1. base_case.csv, which is a set of randomly generated samples via Sobol sampling (from /constants/generate_heatmap_constants.py); 
+2. constants_nrmp.csv (this is taken directly from the NRMP website, created in the excel sheet format_match_data_for_constants.xlsx) and;
+3. local_nrmp_analysis_constants.csv (generated from the generate_nrmp_local_analysis.py)
+
+https: // www.nrmp.org/wp-content/uploads/2025/05/Main_Match_Results_and_Data_20250529_FINAL.pdf
+
+## Running the Model
+
+The whole simulation is contained in simulation.py. You must manually set the analyses you want to run using the analysis_settings.csv. You may also directly set analyses to run in the simulation.py file (top)
 
 ## Repository Structure
 
