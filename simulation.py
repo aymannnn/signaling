@@ -6,6 +6,7 @@ is run :).
 
 import numpy as np
 import pandas as pd
+import random
 import os
 from collections import deque
 from scipy.stats import gamma
@@ -102,11 +103,22 @@ HEATMAP_RESULTS_COLUMNS = [
     'pct_of_app_match_via_signal_given_matched_best_pamgs'
 ]
 
-def read_heatmaps(HEATMAP_RESULTS_PATH: str) -> pd.DataFrame:         
-    if not os.path.exists(HEATMAP_RESULTS_PATH):
-        df = pd.DataFrame(columns=HEATMAP_RESULTS_COLUMNS)
+
+def read_existing_simulation_data(
+    RESULTS_PATH: str,
+    WIPE_DATA: bool) -> pd.DataFrame:
+    
+    # PATH WILL EXIST because it is checked in the viable_analysis and
+    # check analysis directories
+    
+    if WIPE_DATA:
+        print('Wiping analysis data.')
+    
+    if WIPE_DATA or not os.path.isfile(RESULTS_PATH):
+        df = pd.DataFrame(columns = HEATMAP_RESULTS_COLUMNS)
+        df.to_csv(RESULTS_PATH, index=False)
     else:
-        df = pd.read_csv(HEATMAP_RESULTS_PATH)
+        df = pd.read_csv(RESULTS_PATH)
     return df
 
 def read_constants(CONSTANTS_PATH: str) -> pd.DataFrame:
@@ -119,7 +131,6 @@ def read_constants(CONSTANTS_PATH: str) -> pd.DataFrame:
         if col not in not_integers:
             df[col] = df[col].astype(int)
     return df
-
 
 def quartile_from_index(idx: int, n: int) -> int:
     q = n / 4
@@ -164,7 +175,10 @@ class Applicant:
         cls.n_non_signals = cls.n_applications - signal_number
         
     @classmethod
-    def update_analysis_settings(cls, gamma, no_quartile):
+    def update_analysis_settings(
+        cls, 
+        gamma:bool, 
+        no_quartile:bool):
         if gamma:
             cls.gamma_max_applications = True
         if no_quartile:
@@ -380,6 +394,16 @@ class Program:
 
     spots_per_program = int(-1)
     num_interviews = int(-1)
+    RAND_PROG_RANK_LIST_ORDER = False
+    
+    @classmethod
+    def update_analysis_settings(
+        cls,
+        random_prog_rank_list_order:bool
+    ):
+        if random_prog_rank_list_order:
+            cls.RAND_PROG_RANK_LIST_ORDER = True
+        return
 
     def get_quartile(self, constants):
         return quartile_from_index(self.id, int(constants["n_programs"]))
@@ -399,24 +423,39 @@ class Program:
             final_rank_list = 
                 received signals + received no signals [0:remaining spots]
                 
-        TODO: If you want a greedy parallel optimization of non-signal review
-        then this is where to do it.
+        Note: also support for ignoring applicant ranking and randomly
+        ranking people
+                
         '''
         # must review all signals
         self.reviewed_applications = len(self.received_signals)
-        sorted_signals = sorted(self.received_signals)
+        signal_list = []
+        
+        # behavior for random program list orders
+        
+        if Program.RAND_PROG_RANK_LIST_ORDER:
+            signal_list = random.shuffle(self.received_signals)
+        else:
+            signal_list = sorted(self.received_signals)
+        
         if len(self.received_signals) >= self.num_interviews:
-            self.final_rank_list = sorted_signals[0:self.num_interviews]
+            self.final_rank_list = signal_list[0:self.num_interviews]
         else:
             remaining_spots = self.num_interviews - len(self.received_signals)
-            # TO nt DO: can relax this assumption of having to review everybody
+            # TODO: can relax this assumption of having to review everybody
             # if you don't fill with signals with what Bruce and I chatted
             # about regarding some greedy parallel optimization
             self.reviewed_applications += len(self.received_no_signals)
             # final rank list always prioritizes signals
+            no_signal_list = []
+            if Program.RAND_PROG_RANK_LIST_ORDER:
+                # randomize order they are added on
+                no_signal_list = random.shuffle(self.received_no_signals)
+            else:
+                no_signal_list = sorted(self.received_no_signals)    
             self.final_rank_list = (
-                sorted_signals +
-                sorted(self.received_no_signals)[0:remaining_spots])
+                signal_list +
+                no_signal_list[0:remaining_spots])
 
     def __init__(self, id_index, constants):
         self.id = id_index
@@ -932,19 +971,71 @@ def run_simulation_heatmap(CONSTANTS: pd.Series) -> dict:
     return all_results
 
 
+def _makedirs_with_msg(path: str, label: str) -> bool:
+    """Create directory if needed. Return True if it was created."""
+    if not path:
+        path = "."
+    if os.path.isdir(path):
+        return False
+    os.makedirs(path, exist_ok=True)
+    print(f"Created {label} directory: {path}")
+    return True
+
+
+def check_analysis_directories(analysis_settings) -> int:
+    created_any = False
+
+    # RESULTS_PATH is a file -> ensure parent dir exists
+    results_csv = analysis_settings["RESULTS_PATH"]
+    created_any |= _makedirs_with_msg(
+        os.path.dirname(results_csv), "RESULTS_PATH parent")
+
+    # ALL_DATA_EXPORT_PATH is a directory -> ensure it exists
+    export_dir = analysis_settings["ALL_DATA_EXPORT_PATH"]
+    created_any |= _makedirs_with_msg(export_dir, "ALL_DATA_EXPORT_PATH")
+
+    # CONSTANTS_PATH is a file -> ensure parent dir exists, then require file exists
+    constants_file = analysis_settings["CONSTANTS_PATH"]
+    created_any |= _makedirs_with_msg(os.path.dirname(
+        constants_file), "CONSTANTS_PATH parent")
+
+    if not created_any:
+        print("Analysis directories already exist.")
+
+    if os.path.isfile(constants_file):
+        return 1
+
+    print(
+        f"CONSTANTS_PATH file does not exist for analysis: "
+        f"{analysis_settings.get('ANALYSIS_NAME', 'UNKNOWN')}\n"
+        f"Missing: {constants_file}"
+    )
+    return 0
+
+
 def run_analysis(analysis_settings):
     
+    viable_analysis = check_analysis_directories(analysis_settings)
+    if viable_analysis == 0:
+        return    
     constants = read_constants(analysis_settings['CONSTANTS_PATH'])
-    heatmap_data = read_heatmaps(analysis_settings['RESULTS_PATH'])
+    # check if existing data
+    simulation_data = read_existing_simulation_data(
+        analysis_settings['RESULTS_PATH'],
+        analysis_settings['WIPE_DATA'])
+    
     # update whole class for these settings
     Applicant.update_analysis_settings(
         analysis_settings['GAMMA_MAX_APPLICATIONS'],
         analysis_settings['NO_QUARTILE']
     )
+    Program.update_analysis_settings(
+        analysis_settings['RAND_PROG_RANK_LIST_ORDER']
+    )
     
     unique_constants = set(constants['result_file_prefix'].values)
     print(f"Total unique constants provided: {len(unique_constants)}.")
-    already_run_heatmaps = set(heatmap_data['result_file_prefix'].values)
+    already_run_heatmaps = set(simulation_data['result_file_prefix'].values)
     print(f"Number of already run/saved heatmaps: {len(already_run_heatmaps)}.")
 
     heatmaps_not_in_constants = already_run_heatmaps - unique_constants
@@ -979,17 +1070,17 @@ def run_analysis(analysis_settings):
         # Avoid concat-with-empty/all-NA behavior that pandas is changing
         # this is the summary simulation data that we export to
         # heatmap_results.csv
-        if heatmap_data.empty:
-            heatmap_data = processed_results.copy()
+        if simulation_data.empty:
+            simulation_data = processed_results.copy()
         else:
-            heatmap_data = pd.concat(
-                [heatmap_data, processed_results], 
+            simulation_data = pd.concat(
+                [simulation_data, processed_results], 
                 ignore_index=True)
         if iteration % 5 == 0:
             print(f"Completed {
                 iteration} constant sets. Exporting interim results.")
-            heatmap_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
-    heatmap_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
+            simulation_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
+    simulation_data.to_csv(analysis_settings['RESULTS_PATH'], index=False)
 
 
 def to_bool(x):
@@ -1009,7 +1100,11 @@ if __name__ == "__main__":
     
     analysis_settings = pd.read_csv('analysis_settings.csv')
     
-    for col in ["GAMMA_MAX_APPLICATIONS", "NO_QUARTILE", "RUN_ANALYSIS"]:
+    for col in [
+        "GAMMA_MAX_APPLICATIONS", 
+        "NO_QUARTILE",
+        "WIPE_DATA", 
+        "RUN_ANALYSIS"]:
         analysis_settings[col] = analysis_settings[col].map(to_bool)
     
     # the other variables will be strings by default
