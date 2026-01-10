@@ -279,68 +279,57 @@ class Applicant:
                 return
 
             # First: try to get programs from the target quartile
-            program_choices = program_quartile_list[quartile]  # list of IDs
-            available = [p for p in program_choices
-                         if p not in already_chosen_programs]
+            available = [
+                p for p in program_quartile_list[quartile]
+                if p not in already_chosen_programs
+            ]
 
-            # If this quartile alone doesn't have enough distinct programs,
-            # top up from other quartiles, starting with those closest
-            # to the APPLICANT'S quartile.
-            if len(available) < num:
-                # note: this if statement never occurs in the
-                # base case scenario and is only for edge cases
-                # when there are not enough available programs in the
-                # quartile of interest
-                needed = num - len(available)
+            initial_pull = min(num, len(available))
 
+            # IMPORTANT: convert to list so concatenation works correctly
+            program_choices = (
+                np.random.choice(available, size=initial_pull, replace=False).tolist()
+                if initial_pull > 0 else []
+            )
+
+            chosen_set = set(program_choices)
+
+            # Top up if needed, pulling from other quartiles
+            if initial_pull < num:
+                needed = num - initial_pull
                 for q in quartiles_by_closeness:
-                    if q == quartile:
-                        # we've already pulled from this quartile
+                    if q == quartile: # already checked
                         continue
+                    if needed == 0:
+                        break
 
                     candidates_q = [
                         p for p in program_quartile_list[q]
-                        if (p not in already_chosen_programs)
-                        and (p not in available)
+                        if (p not in already_chosen_programs) and (p not in chosen_set)
                     ]
                     if not candidates_q:
                         continue
 
                     if len(candidates_q) <= needed:
-                        # take all of them
-                        available.extend(candidates_q)
+                        program_choices.extend(candidates_q)
+                        chosen_set.update(candidates_q)
                         needed -= len(candidates_q)
                     else:
-                        # randomly choose just enough from this quartile
-                        extra = np.random.choice(
+                        additional_choices = np.random.choice(
                             candidates_q, size=needed, replace=False
-                        )
-                        available.extend(extra.tolist())
+                        ).tolist()
+                        program_choices.extend(additional_choices)
+                        chosen_set.update(additional_choices)
                         needed = 0
 
-                    if needed == 0:
-                        break
-
-            # If there are no programs left at all, we're done
-            if not available:
-                return
-
-            # If, even after topping up, there are fewer than num programs,
-            # clamp num to what we actually have.
-            if len(available) < num:
-                num = len(available)
-
-            # Final sample without replacement from `available`
-            choices = np.random.choice(available, size=num, replace=False)
-            for choice in choices:
+            for choice in program_choices:
                 applications.append(choice)
-                # you need this already chosen program since you
-                # need to call again for next quartile
                 already_chosen_programs.add(choice)
                 if signals:
                     all_programs[choice].received_signals.append(self.id)
                 else:
                     all_programs[choice].received_no_signals.append(self.id)
+
 
         _add_to_application_list(divisions_of_4, quartile_above)
         _add_to_application_list(divisions_of_4, quartile_below)
@@ -351,6 +340,16 @@ class Applicant:
                 f"Warning: Expected {length} applications but got {len(applications)} for applicant {self.id}. However, maximum remaining programs is {maximum_remaining_programs}.")
 
         return applications
+    
+    def create_final_rank_list(self):
+        if Applicant.RAND_APP_RANK_LIST_ORDER:
+            # shuffle in place
+            random.shuffle(self.signaled_interviews)
+            random.shuffle(self.non_signaled_interviews)
+        else:
+            self.signaled_interviews.sort()  # sort in ascending order
+            self.non_signaled_interviews.sort()  # sort in ascending order
+        self.final_rank_list = self.signaled_interviews + self.non_signaled_interviews
 
     def __init__(self,
                  id_index: int,
@@ -368,22 +367,6 @@ class Applicant:
         )
         self.non_signaled_programs = self.pick_programs(
             programs, program_quartile_list, False, gamma_simulation_data
-        )
-                
-        if Applicant.RAND_APP_RANK_LIST_ORDER:
-            # shuffle in place
-            random.shuffle(self.signaled_programs)
-            random.shuffle(self.non_signaled_programs)
-        else:
-            self.signaled_programs.sort()  # sort in ascending order
-            self.non_signaled_programs.sort()  # sort in ascending order
-            
-        # note that final rank list is
-        # signaled programs followed by non-signaled programs, just to give
-        # a sense of "reality" with signals being prioritized
-        # NOTE: this final rank list 
-        self.final_rank_list = (
-            self.signaled_programs + self.non_signaled_programs
         )
         self.signaled_interviews = []
         self.non_signaled_interviews = []
@@ -539,6 +522,9 @@ def stable_match(applicants: list, programs: list):
             continue
 
         # Next program on this applicant's list
+        # note: final_rank_list now is only the programs that the applicant
+        # received an interview at, so it's actually a final rank list
+        # they may not be on the programs rank list but this models real life
         program_id = applicant.final_rank_list[next_proposal_index[applicant_id]]
         next_proposal_index[applicant_id] += 1
         program = programs[program_id]
@@ -723,6 +709,12 @@ def run_simulation(s, constants, gamma_simulation_data={}):
                 applicants[app_id].signaled_interviews.append(program.id)
             else:
                 applicants[app_id].non_signaled_interviews.append(program.id)
+    
+    # NOW create the APPLICANT final rank list
+    # to use in stable matching
+
+    for applicant in applicants:
+        applicant.create_final_rank_list()
     
     # calculate average applicant interview statistics
     
