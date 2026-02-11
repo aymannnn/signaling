@@ -1,4 +1,5 @@
 *.out
 *.github
 *.vscode
+*.ini
 __pycache__/
