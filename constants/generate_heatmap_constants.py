@@ -12,7 +12,7 @@ SIGNAL_MAX = 40 # max number of signals
 # randomized variables
 BOUNDS = {
     'n_programs': (10, 800),
-    'n_positions': (10, 10000),
+    'n_positions': (10, 12000),
     'n_applicants': (20, 18000),
     'interviews_per_spot': (5, 20),
     'max_applications': (5, 60)

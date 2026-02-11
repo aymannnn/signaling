@@ -29,6 +29,10 @@ The whole simulation is contained in simulation.py. You must manually set the an
 5. RAND_APP_RANK_LIST_ORDER - randomize the applicant final rank list (i.e. don't respect program index/rank)
 6. RAND_PROG_RANK_LIST_ORDER - randomize the program final rank list (i.e. don't respect applicant index/rank)
 
+## Storing ALL Model Data
+
+simulation_store_all_data.py and the associated analysis settings are to store ALL simulation data, i.e. all of the applicant and program specific data. This creates massive files, so it is only done for the NRMP local analyses. 
+
 ## Repository Structure
 ## TODO: UPDATE FROM HERE
 
@@ -36,6 +40,8 @@ The whole simulation is contained in simulation.py. You must manually set the an
 2. simulation_results/: the simulation and graphs will default to this location. all other folders are just for study results of specific subsets.
 3. constants.csv: constants for your simulation run, will always read from here
 4. simulation.py/data_analysis.py: simulation and graphing of results, respectively
+
+## 
 
 ## Simulation
 

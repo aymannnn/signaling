@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import gamma
 
-OUTPUT_PATH = "results/gamma_graph.png"
+OUTPUT_PATH = "final_figures/gamma_graph.png"
 
 def plot_gamma_distribution(shape, scale, max_apps, path = None):
     x = np.linspace(0, max_apps, 1000)

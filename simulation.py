@@ -12,11 +12,16 @@ import random
 import os
 from collections import deque
 from scipy.stats import gamma
+import json
+import os
 
 # Gamma settings
 
 GAMMA_SHAPE = 8.0
 GAMMA_SCALE = 30 / 8  # mean of 30 applications
+
+# can modify here to leave whatever number of cores free
+CORES_TO_USE = max(1, os.cpu_count()-4)
 
 # there is a better way to do this but for now keep
 # will have to manually add of these optimals if we add more...
@@ -77,7 +82,6 @@ HEATMAP_RESULTS_COLUMNS = [
     # best signal pigns
     'best_signal_pigns',
     'reviews_per_program_best_pigns',
-    
     'unmatched_applicants_best_pigns',
     'unfilled_spots_best_pigns',
     'pct_interview_given_signal_best_pigns',
@@ -107,19 +111,29 @@ HEATMAP_RESULTS_COLUMNS = [
 
 def read_existing_simulation_data(
     RESULTS_PATH: str,
-    WIPE_DATA: bool) -> pd.DataFrame:
+    WIPE_DATA: bool,
+    ALL_DATA_EXPORT_PATH: str,
+    STORE_ALL_DATA: bool,
+    STORE_ALL_DATA_PATH: str) -> pd.DataFrame:
     
     # PATH WILL EXIST because it is checked in the viable_analysis and
     # check analysis directories
     
     if WIPE_DATA:
         print('Wiping analysis data.')
-    
     if WIPE_DATA or not os.path.isfile(RESULTS_PATH):
+        if os.path.isdir(ALL_DATA_EXPORT_PATH):
+            shutil.rmtree(ALL_DATA_EXPORT_PATH)
+        os.makedirs(ALL_DATA_EXPORT_PATH, exist_ok=True)
         df = pd.DataFrame(columns = HEATMAP_RESULTS_COLUMNS)
         df.to_csv(RESULTS_PATH, index=False)
     else:
         df = pd.read_csv(RESULTS_PATH)
+    
+    if STORE_ALL_DATA and WIPE_DATA:
+        if os.path.isdir(STORE_ALL_DATA_PATH):
+            shutil.rmtree(STORE_ALL_DATA_PATH)
+        os.makedirs(STORE_ALL_DATA_PATH, exist_ok=True)
     return df
 
 def read_constants(CONSTANTS_PATH: str) -> pd.DataFrame:
@@ -249,8 +263,9 @@ class Applicant:
             if length > len(available_programs):
                 length = len(available_programs)
             program_choices = np.random.choice(
-                available_programs, size = length, replace = False)
+                available_programs, size = length, replace = False).tolist()
             for choice in program_choices:
+                choice = int(choice) # proper type casting for later json
                 applications.append(choice)
                 # you need this already chosen program since you
                 # need to call again for next quartile
@@ -323,6 +338,7 @@ class Applicant:
                         needed = 0
 
             for choice in program_choices:
+                choice = int(choice) # proper type casting for later json
                 applications.append(choice)
                 already_chosen_programs.add(choice)
                 if signals:
@@ -382,7 +398,7 @@ class Program:
         "received_no_signals",
         "reviewed_applications",
         "final_rank_list",
-        "tentative_matches",
+        "tentative_matches", # note, tentative matches becomes final matches
         "n_positions",
         "n_interviews",
         "rank_index",    # added in stable_match
@@ -669,76 +685,52 @@ def _get_positions_per_program(constants):
     for program in programs_to_add_one:
         positions_per_program[program] += 1
     return positions_per_program
-    
 
-def run_simulation(s, constants, gamma_simulation_data={}):
-    results = {}
-    program_quartile_list = get_quartile_dict(constants['n_programs'])
-    # in the refactoring for each program to have an independent number of
-    # positions and thus interviews to offer, we must
-    # change the initialization here
 
-    positions_per_program = _get_positions_per_program(constants)     
-    programs = [
-        Program(
-            j, constants, positions_per_program[j] # the index gets to how many
-            # positions that program has
-            ) for j in range(constants['n_programs'])]
-    applicants = [
-        Applicant(i, 
-                  programs, 
-                  program_quartile_list, 
-                  gamma_simulation_data) for i in range(
-            constants['n_applicants'])]
-    for program in programs:
-        program.create_final_rank_list_and_count_reviews()
-    total_reviews = sum(
-        [program.reviewed_applications for program in programs])
-    avg_reviews_per_program = total_reviews / constants['n_programs']
-    results['reviews_per_program'] = avg_reviews_per_program
-    
-    # now also calculate the applicant interviews received
-    # TODO: One day maybe it is worth recording this data
-    # but we do some calculations on it 
-    # ultimately could probably JUST store matched programs, signals,
-    # and non-signals, and that would tell all results ...
-    for program in programs:
-        for app_id in program.final_rank_list:
-            applicants[app_id].interviews_received.append(program.id)
-            if program.id in applicants[app_id].signaled_programs:
-                applicants[app_id].signaled_interviews.append(program.id)
-            else:
-                applicants[app_id].non_signaled_interviews.append(program.id)
-    
-    # NOW create the APPLICANT final rank list
-    # to use in stable matching
+def save_simulation_data(
+    save_path: str,
+    programs: list,
+    applicants: list
+):
+    '''
+    Persist per-simulation applicant/program outputs to disk.
+    Outputs (two files):
+      - {save_path}applicants.parquet
+      - {save_path}programs.parquet
+    '''
 
-    for applicant in applicants:
-        applicant.create_final_rank_list()
-    
-    # calculate average applicant interview statistics
-    
-    applicant_statistics = count_applicant_interview_rates(applicants)
-    results['pct_interview_given_signal'] = applicant_statistics[
-        'pct_interview_given_signal']
-    results['pct_interview_given_nosignal'] = applicant_statistics[
-        'pct_interview_given_nosignal']
-    results['pct_interview_given_application'] = applicant_statistics[
-        'pct_interview_given_application']
-            
-    # last step is for the matching algorithm, which is stable matching
-    applicants_matched, programs_matched = stable_match(applicants, programs)
-    
-    # post matching counts
-    post_match_counts = post_match_analysis(
-        applicants_matched, programs_matched)
-    
-    results['unmatched_applicants'] = post_match_counts['unmatched_applicants']
-    results['unfilled_spots'] = post_match_counts['unfilled_spots']
-    results['pct_of_app_match_via_signal_given_matched'] = post_match_counts[
-        'pct_of_app_match_via_signal_given_matched']
-    
-    return results
+    def _json(x):
+        return json.dumps(x, separators=(",", ":"))
+
+    applicants_df = pd.DataFrame({
+        "applicant_id": [a.id for a in applicants],
+        "quartile": [a.quartile for a in applicants],
+        "matched_program": [a.matched_program for a in applicants],
+        "signaled_programs": [_json(a.signaled_programs) for a in applicants],
+        "non_signaled_programs": [_json(a.non_signaled_programs) for a in applicants],
+        "signaled_interviews": [_json(a.signaled_interviews) for a in applicants],
+        "non_signaled_interviews": [_json(a.non_signaled_interviews) for a in applicants],
+        "final_rank_list": [_json(a.final_rank_list) for a in applicants],
+        "interviews_received": [_json(a.interviews_received) for a in applicants],
+    })
+
+    programs_df = pd.DataFrame({
+        "program_id": [p.id for p in programs],
+        "quartile": [p.quartile for p in programs],
+        "n_positions": [p.n_positions for p in programs],
+        "n_interviews": [p.n_interviews for p in programs],
+        "received_signals": [_json(p.received_signals) for p in programs],
+        "received_no_signals": [_json(p.received_no_signals) for p in programs],
+        "reviewed_applications": [p.reviewed_applications for p in programs],
+        "final_rank_list": [_json(p.final_rank_list) for p in programs],
+        "tentative_matches": [_json(p.tentative_matches) for p in programs],
+    })
+
+    applicants_out_parquet = f"{save_path}applicants.parquet"
+    programs_out_parquet = f"{save_path}programs.parquet"
+
+    applicants_df.to_parquet(applicants_out_parquet, index=False)
+    programs_df.to_parquet(programs_out_parquet, index=False)
 
 def get_simulation_optimals(
     simulation_results, signal_values):
@@ -853,11 +845,95 @@ def process_simulation_heatmap(
     return pd.DataFrame([final_dataframe])
 
 
-def _simulate_for_signal(
+def run_simulation(
+        signal_value: int,
+        simulation_number: int,
+        store_all_data: bool,
+        store_all_data_path: str,
+        constants,
+        gamma_simulation_data={}):
+
+    results = {}
+    program_quartile_list = get_quartile_dict(constants['n_programs'])
+    # in the refactoring for each program to have an independent number of
+    # positions and thus interviews to offer, we must
+    # change the initialization here
+
+    positions_per_program = _get_positions_per_program(constants)
+    programs = [
+        Program(
+            # the index gets to how many
+            j, constants, positions_per_program[j]
+            # positions that program has
+        ) for j in range(constants['n_programs'])]
+    applicants = [
+        Applicant(i,
+                  programs,
+                  program_quartile_list,
+                  gamma_simulation_data) for i in range(
+            constants['n_applicants'])]
+    for program in programs:
+        program.create_final_rank_list_and_count_reviews()
+    total_reviews = sum(
+        [program.reviewed_applications for program in programs])
+    avg_reviews_per_program = total_reviews / constants['n_programs']
+    results['reviews_per_program'] = avg_reviews_per_program
+
+    for program in programs:
+        for app_id in program.final_rank_list:
+            applicants[app_id].interviews_received.append(program.id)
+            if program.id in applicants[app_id].signaled_programs:
+                applicants[app_id].signaled_interviews.append(program.id)
+            else:
+                applicants[app_id].non_signaled_interviews.append(program.id)
+
+    # NOW create the APPLICANT final rank list
+    # to use in stable matching
+
+    for applicant in applicants:
+        applicant.create_final_rank_list()
+
+    # calculate average applicant interview statistics
+
+    applicant_statistics = count_applicant_interview_rates(applicants)
+    results['pct_interview_given_signal'] = applicant_statistics[
+        'pct_interview_given_signal']
+    results['pct_interview_given_nosignal'] = applicant_statistics[
+        'pct_interview_given_nosignal']
+    results['pct_interview_given_application'] = applicant_statistics[
+        'pct_interview_given_application']
+
+    # last step is for the matching algorithm, which is stable matching
+    applicants_matched, programs_matched = stable_match(applicants, programs)
+
+    if store_all_data:
+        check_dir = Path(store_all_data_path)
+        check_dir = check_dir / constants['result_file_prefix']
+        os.makedirs(check_dir, exist_ok=True)
+        save_path = check_dir / \
+            f"signal_{signal_value}_sim_{simulation_number}_"
+        save_simulation_data(
+            str(save_path),
+            programs_matched,
+            applicants_matched)
+
+    # post matching counts
+    post_match_counts = post_match_analysis(
+        applicants_matched, programs_matched)
+
+    results['unmatched_applicants'] = post_match_counts['unmatched_applicants']
+    results['unfilled_spots'] = post_match_counts['unfilled_spots']
+    results['pct_of_app_match_via_signal_given_matched'] = post_match_counts[
+        'pct_of_app_match_via_signal_given_matched']
+
+    return results
+
+def setup_simulation_given_signal(
         constants: pd.Series,
         signal_value: int,
         seed: int,
-        analysis_settings: dict):
+        analysis_settings: dict,
+        simulation_number: int):
     """
      Single simulation run for a given signal_value.
     Did move applicant.update_signal_number inside so that each process
@@ -866,6 +942,8 @@ def _simulate_for_signal(
     It's actually real important to give them a random seed here because
     there can be a risk with parallelizaition that multiple processes
     get the same random seed and thus produce correlated results.
+    
+    Update all constant type things here.
     """
     
     Applicant.update_analysis_settings(
@@ -921,13 +999,16 @@ def _simulate_for_signal(
     
     simulation_results = run_simulation(
         signal_value, 
+        simulation_number,
+        analysis_settings['STORE_ALL_DATA'],
+        analysis_settings['STORE_ALL_DATA_PATH'],
         constants,
         gamma_simulation_data=gamma_simulation_data)
     
     return simulation_results
 
 
-def run_simulation_heatmap(
+def run_scenario(
     CONSTANTS: pd.Series,
     analysis_settings: dict) -> dict:
     '''
@@ -968,10 +1049,10 @@ def run_simulation_heatmap(
     from concurrent.futures import ProcessPoolExecutor
 
     # One process pool reused across all batches
-    with ProcessPoolExecutor() as executor:
+    with ProcessPoolExecutor(max_workers=CORES_TO_USE) as executor:
         for i in range(CONSTANTS['simulations_per_s']):
             print(
-                f"Starting simulation batch {i+1} of "
+                f"Submitting simulation batch {i+1} of "
                 f"{CONSTANTS['simulations_per_s']}"
             )
 
@@ -989,11 +1070,12 @@ def run_simulation_heatmap(
             # each worker does the job and returns results
             futures = [
                 executor.submit(
-                    _simulate_for_signal, 
+                    setup_simulation_given_signal, 
                     CONSTANTS, 
                     s_val, 
                     int(seed), 
-                    analysis_settings)
+                    analysis_settings,
+                    i)
                 for s_val, seed in zip(signal_values, seeds)
             ]
 
@@ -1105,7 +1187,10 @@ def run_analysis(analysis_settings):
     # check if existing data
     simulation_data = read_existing_simulation_data(
         analysis_settings['RESULTS_PATH'],
-        analysis_settings['WIPE_DATA'])
+        analysis_settings['WIPE_DATA'],
+        analysis_settings['ALL_DATA_EXPORT_PATH'],
+        analysis_settings['STORE_ALL_DATA'],
+        analysis_settings['STORE_ALL_DATA_PATH'])
     
     unique_constants = set(constants['result_file_prefix'].values)
     print(f"Total unique constants provided: {len(unique_constants)}.")
@@ -1122,12 +1207,12 @@ def run_analysis(analysis_settings):
     to_run_constants_df = constants[
        constants['result_file_prefix'].isin(to_run_constants)]
     
-    print('Number of cores:', os.cpu_count())
+    print('Number of cores to be used:' , CORES_TO_USE)
 
     iteration = 0
     for _, CONSTANTS in to_run_constants_df.iterrows():
         iteration += 1
-        all_results = run_simulation_heatmap(CONSTANTS, analysis_settings)
+        all_results = run_scenario(CONSTANTS, analysis_settings)
         simulation_results = all_results['all_data']
         processed_results = all_results['processed_results']
         
@@ -1179,7 +1264,8 @@ if __name__ == "__main__":
         "WIPE_DATA", 
         "RUN_ANALYSIS",
         "RAND_APP_RANK_LIST_ORDER",
-        "RAND_PROG_RANK_LIST_ORDER"]:
+        "RAND_PROG_RANK_LIST_ORDER",
+        "STORE_ALL_DATA"]:
         analysis_settings[col] = analysis_settings[col].map(to_bool)
     
     # the other variables will be strings by default

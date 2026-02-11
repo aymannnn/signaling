@@ -1,0 +1,29 @@
+,Base Case,Random # of Applications,Random Application Distribution,Random # and Distribution of Applications,Random Program Rank List,Random Applicant Rank List,Random Applicant and Program Rank Lists
+Anesthesiology,9.0,9.0,9.0,9.0,9.0,9.0,9.0
+Child Neurology,12.0,12.0,12.0,12.0,12.0,12.0,12.0
+Dermatology,2.0,2.0,2.0,2.0,2.0,2.0,2.0
+Emergency Medicine,12.0,12.0,12.0,12.0,12.0,12.0,12.0
+Family Medicine,11.0,11.0,11.0,11.0,11.0,11.0,11.0
+Internal Medicine (Categorical),9.0,9.0,9.0,9.0,9.0,9.0,9.0
+Interventional Radiology (Integrated),3.0,3.0,3.0,3.0,3.0,3.0,3.0
+Medicine-Emergency Med,5.0,5.0,5.0,5.0,5.0,5.0,5.0
+Medicine-Pediatrics,10.0,10.0,10.0,10.0,10.0,10.0,10.0
+Medicine-Preliminary (PGY-1 Only),5.0,5.0,5.0,5.0,5.0,5.0,5.0
+Medicine-Primary,4.0,4.0,4.0,4.0,4.0,4.0,4.0
+Neurological Surgery,11.0,10.0,11.0,10.0,11.0,11.0,11.0
+Neurology,8.0,8.0,8.0,8.0,8.0,8.0,8.0
+Obstetrics-Gynecology,12.0,11.0,12.0,12.0,12.0,12.0,12.0
+Orthopaedic Surgery,10.0,10.0,10.0,10.0,10.0,10.0,10.0
+Otolaryngology,12.0,11.0,12.0,12.0,12.0,12.0,12.0
+Pathology,10.0,10.0,10.0,10.0,10.0,10.0,10.0
+Pediatrics (Categorical),11.0,11.0,11.0,11.0,11.0,11.0,11.0
+Pediatrics-Primary,2.0,2.0,2.0,2.0,2.0,2.0,2.0
+Physical Medicine & Rehab,5.0,5.0,5.0,5.0,6.0,5.0,6.0
+Plastic Surgery (Integrated),10.0,10.0,11.0,10.0,10.0,10.0,10.0
+Psychiatry,11.0,11.0,11.0,11.0,11.0,11.0,11.0
+Radiology-Diagnostic,3.0,3.0,3.0,3.0,3.0,3.0,3.0
+Surgery (Categorical),9.0,9.0,9.0,9.0,9.0,9.0,9.0
+Surgery-Preliminary (PGY-1 Only),9.0,9.0,9.0,9.0,9.0,9.0,9.0
+Thoracic Surgery,9.0,9.0,9.0,9.0,9.0,9.0,9.0
+Transitional (PGY-1 Only),6.0,6.0,6.0,6.0,6.0,6.0,6.0
+Vascular Surgery,12.0,12.0,12.0,12.0,13.0,12.0,13.0

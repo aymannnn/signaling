@@ -1,10 +1,9 @@
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from pathlib import Path
 
 # the purpose of this file is to generate the full data matrix for machine
 # learning, which looks different then the summary data frame
+# specifically, summary doesn't have info for all signal values
 
 ALL_DATA_BASE_CASE = 'results/all_data_base_case/'
 BASE_CASE_SUMMARY = 'results/base_case.csv'
@@ -21,8 +20,7 @@ def generate_whole_matrix(result_summary_path,
 
     df_characteristics = [
         'n_programs',
-        # 'n_positions', # should probably  use the simulated positions
-        'simulated_positions',
+        'n_positions',
         'n_applicants',
         'interviews_per_spot',
         'max_applications',
