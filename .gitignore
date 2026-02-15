@@ -3,3 +3,17 @@
 *.vscode
 *.ini
 __pycache__/
+.gemini/
+*.parquet
+results/
+figures/
+machine_learning_model/
+signaling/
+*.pyc
+*.pyo
+*.pyd
+*~
+*.swp
+.DS_Store
+GEMINI.md
+*.venv
