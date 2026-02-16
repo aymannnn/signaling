@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
-from probability_graphs import METRICS_TO_PLOT, METRIC_TITLES, calculate_stats, load_data
+from individual_graphs import METRICS_TO_PLOT, METRIC_TITLES, calculate_stats, load_data
 
 ANALYSES = [
     "base",

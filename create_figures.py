@@ -1,11 +1,13 @@
 import os
 import pandas as pd
-from probability_graphs import create_program_graphs_for_analysis
+from individual_graphs import create_program_graphs_for_analysis
 from combined_graphs import plot_combined_scenario_graphs, plot_dual_axis_program_graphs
+from decile_graphs import generate_all_decile_graphs
 
 GRAPH_INDIVIDUAL_ANALYSES = False
 GRAPH_COMBINED_SCENARIOS = False
-GRAPH_DUAL_AXIS_PROGRAMS = True
+GRAPH_DUAL_AXIS_PROGRAMS = False
+GRAPH_DECILE_PLOTS = True
 
 DUAL_AXIS_PROGRAMS = [
     "Surgery (Categorical)",
@@ -54,6 +56,11 @@ def main():
         specific_programs = DUAL_AXIS_PROGRAMS
         output_dir_dual_axis = "figures/joint/"
         plot_dual_axis_program_graphs(specific_programs, output_dir_dual_axis)
+        print("-" * 50)
+    
+    if GRAPH_DECILE_PLOTS:
+        print("Generating decile graphs...")
+        generate_all_decile_graphs()
         print("-" * 50)
 
 

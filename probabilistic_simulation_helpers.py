@@ -99,3 +99,14 @@ def get_lookups(sim_settings):
     }
 
     return lookups
+
+
+def get_dtypes(columns: list) -> dict:
+    '''
+    Given a list of columns, identify the first as a string and the
+    remainder as booleans for later use in a dataframe read.
+    '''
+    return {
+        **{columns[0]: 'str'},
+        **{col: 'bool' for col in columns[1:]}
+    }

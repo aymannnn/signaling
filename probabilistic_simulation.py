@@ -593,15 +593,6 @@ def read_run_simulations(RESULTS_PATH: str, WIPE_DATA: bool) -> pd.DataFrame:
         return pd.read_csv(RESULTS_PATH)
     
 
-def _get_dtypes(columns: list) -> dict:
-    '''
-    Given a list of columns, identify the first as a string and the
-    remainder as booleans for later use in a dataframe read.
-    '''
-    return {
-        **{columns[0]: 'str'},
-        **{col: 'bool' for col in columns[1:]}
-    }
 
 
 def read_analysis_variations(path: str) -> pd.DataFrame:
@@ -612,7 +603,7 @@ def read_analysis_variations(path: str) -> pd.DataFrame:
     try:
         # Get columns first to dynamically create dtypes
         cols = pd.read_csv(path, nrows=0).columns.tolist()
-        dtypes = _get_dtypes(cols)
+        dtypes = helpers.get_dtypes(cols)
         return pd.read_csv(path, dtype=dtypes)
     except FileNotFoundError:
         print(f"Error: The file {path} was not found.")
