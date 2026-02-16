@@ -1,0 +1,6 @@
+analysis_name,run_bool,random_application_distribution,random_applicant_rank_list,random_program_rank_list
+base,True,False,False,False
+random_distribution,True,True,False,False
+random_applicant_rank_list,True,False,True,False
+random_program_rank_list,True,False,False,True
+random_all,True,True,True,True

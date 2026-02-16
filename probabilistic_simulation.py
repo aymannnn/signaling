@@ -12,6 +12,7 @@ import os
 import pyarrow.parquet as pq
 import probabilistic_simulation_helpers as helpers
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 
 # can modify here to leave whatever number of cores free
 CORES_TO_USE = max(1, os.cpu_count()-4)
@@ -19,7 +20,8 @@ CORES_TO_USE = max(1, os.cpu_count()-4)
 def calculate_results(
     applicants: list, 
     programs: list,
-    sim_settings: dict):
+    sim_settings: dict,
+    analysis_name: str):
 
     results = {
         'sim_id': sim_settings['sim_id'],
@@ -27,7 +29,8 @@ def calculate_results(
         'signals': sim_settings['signals'],
         'n_programs': sim_settings['n_programs'],
         'n_positions': sim_settings['n_positions'],
-        'n_applicants': sim_settings['n_applicants']
+        'n_applicants': sim_settings['n_applicants'],
+        'analysis_name': analysis_name
     }
     
 
@@ -263,9 +266,6 @@ class Applicant:
 
         already_chosen_programs = set(
             self.signaled_programs + self.non_signaled_programs)
-
-        maximum_remaining_programs = len(
-            all_programs) - len(already_chosen_programs)
 
         # very easy to ignore quartiles. just apply randomly
         
@@ -516,14 +516,14 @@ def _get_positions_per_program(constants):
             positions[program] += 1
     return positions
 
-def run_sim(sim_settings:dict) -> dict:
+def run_sim(sim_settings: dict, variation_settings: dict) -> dict:
     '''
     Worker function for parallel execution, runs one full simulation given
-    settings dictionary
+    a simulation settings dictionary and a variation settings dictionary.
     '''
 
     # hash it to the sim id which is always unique
-    seed = abs(hash(str(sim_settings['sim_id']))) % (2**32)
+    seed = abs(hash(str(sim_settings['sim_id'])) + hash(str(variation_settings['analysis_name']))) % (2**32)
     np.random.seed(seed)
     
     positions_per_program = _get_positions_per_program(sim_settings)
@@ -535,11 +535,12 @@ def run_sim(sim_settings:dict) -> dict:
             sim_settings['interviews_per_pos_list'][j], 
             positions_per_program[j],
             position_lookups,
-            random_rank_list_order=False # TODO: incorporate later
+            random_rank_list_order=variation_settings[
+                'random_program_rank_list']
         ) for j in range(sim_settings['n_programs'])
     ]
     
-    # create each applicant, also applies to programs
+    # create each applicant, apply to programs
     applicants = [
         Applicant(
             i,
@@ -547,8 +548,10 @@ def run_sim(sim_settings:dict) -> dict:
             position_lookups,
             sim_settings['applications_list'][i],
             sim_settings['signals'],
-            no_quartile=False, # TODO: incorporate later
-            random_rank_list_order=False # TODO: incorporate later
+            no_quartile=variation_settings[
+                'random_application_distribution'],
+            random_rank_list_order=variation_settings[
+                'random_applicant_rank_list']
         ) for i in range(sim_settings['n_applicants'])
     ]
     
@@ -570,7 +573,11 @@ def run_sim(sim_settings:dict) -> dict:
     # match
     applicants, programs = stable_match(applicants, programs)
 
-    return calculate_results(applicants, programs, sim_settings)
+    return calculate_results(
+        applicants, 
+        programs, 
+        sim_settings, 
+        variation_settings['analysis_name'])
 
 
 def read_run_simulations(RESULTS_PATH: str, WIPE_DATA: bool) -> pd.DataFrame:
@@ -584,66 +591,108 @@ def read_run_simulations(RESULTS_PATH: str, WIPE_DATA: bool) -> pd.DataFrame:
         return pd.DataFrame()
     else:
         return pd.read_csv(RESULTS_PATH)
+    
+
+def _get_dtypes(columns: list) -> dict:
+    '''
+    Given a list of columns, identify the first as a string and the
+    remainder as booleans for later use in a dataframe read.
+    '''
+    return {
+        **{columns[0]: 'str'},
+        **{col: 'bool' for col in columns[1:]}
+    }
+
+
+def read_analysis_variations(path: str) -> pd.DataFrame:
+    '''
+    Read the analysis variations from a CSV file and return a
+    pandas DataFrame.
+    '''
+    try:
+        # Get columns first to dynamically create dtypes
+        cols = pd.read_csv(path, nrows=0).columns.tolist()
+        dtypes = _get_dtypes(cols)
+        return pd.read_csv(path, dtype=dtypes)
+    except FileNotFoundError:
+        print(f"Error: The file {path} was not found.")
+        return pd.DataFrame()
 
 if __name__ == "__main__":
     
-    results_path = "results/probabilistic/results.csv"
-    sim_results = read_run_simulations(
-        RESULTS_PATH=results_path,
-        WIPE_DATA=False)
-    sims_run = set(sim_results['sim_id'].values) if not sim_results.empty else set()
-    
-    simulation_constants = pq.ParquetFile("constants/constants.parquet")
-    # each simulation contains huge amounts of data (gamma dists) so 
-    # read in 
-    
     print(f"Starting probabilistic simulation on {CORES_TO_USE} cores.")
-
-    BATCH_SIZE = 100
-
-    # Process file in chunks
-    for batch_idx, sim_batch in enumerate(simulation_constants.iter_batches(batch_size=BATCH_SIZE)):
-        chunk_df = sim_batch.to_pandas()
-        tasks = []
-
-        for index, sim_constants in chunk_df.iterrows():
-            sim_config = sim_constants.to_dict()
-            if sim_config['sim_id'] in sims_run:
-                continue
-            tasks.append(sim_config)
-
-        if not tasks:
+    analysis_variations = read_analysis_variations("analysis_variations.csv")
+    
+    for index, variation_row in analysis_variations.iterrows():
+        if not variation_row['run_bool']:
             continue
+        
+        analysis_name = variation_row['analysis_name']
+        
+        results_path = f"results/results_{analysis_name}.csv"
+        sim_results = read_run_simulations(
+            RESULTS_PATH=results_path,
+            WIPE_DATA=False)
+        sims_run = set(
+            sim_results['sim_id'].values) if not sim_results.empty else set()
 
-        # Execute batch in parallel
-        with ProcessPoolExecutor(max_workers=CORES_TO_USE) as executor:
-            future_results = executor.map(run_sim, tasks)
+        variation_settings = variation_row.to_dict()
+        print(f"Running analysis: {variation_settings['analysis_name']}. Already ran simulations: {len(sims_run)}")
 
-            new_results = []
-            for res in future_results:
-                new_results.append(res)
+        simulation_constants = pq.ParquetFile("constants/constants.parquet")
+        
+        BATCH_SIZE = 100
 
-            if new_results:
-                batch_df = pd.DataFrame(new_results)
+        # Process file in chunks
+        for batch_idx, sim_batch in enumerate(simulation_constants.iter_batches(batch_size=BATCH_SIZE)):
+            chunk_df = sim_batch.to_pandas()
+            tasks = []
 
-                if sim_results.empty:
-                    sim_results = batch_df
-                else:
-                    sim_results = pd.concat(
-                        [sim_results, batch_df], ignore_index=True)
+            for _, sim_constants in chunk_df.iterrows():
+                sim_config = sim_constants.to_dict()
+                if sim_config['sim_id'] in sims_run:
+                    continue
+                tasks.append(sim_config)
 
-                sims_run.update(batch_df['sim_id'].values)
+            if not tasks:
+                continue
 
-        print(
-            f"Batch {batch_idx + 1} processed. Total simulations: {len(sim_results)}")
+            # Execute batch in parallel
+            with ProcessPoolExecutor(max_workers=CORES_TO_USE) as executor:
+                # Create a partial function with variation_settings fixed
+                run_sim_with_variation = partial(
+                    run_sim, 
+                    variation_settings=variation_settings)
+                future_results = executor.map(
+                    run_sim_with_variation, 
+                    tasks)
+                
+                new_results = []
+                for res in future_results:
+                    new_results.append(res)
 
-        # Save interim results
-        if (batch_idx + 1) % 5 == 0:
-            os.makedirs(os.path.dirname(results_path), exist_ok=True)
-            sim_results.to_csv(results_path, index=False)
-            print(f"Interim save to {results_path}")
+                if new_results:
+                    batch_df = pd.DataFrame(new_results)
 
-    # Final save
-    os.makedirs(os.path.dirname(results_path), exist_ok=True)
-    sim_results.to_csv(results_path, index=False)
-    print("Simulation complete.")
+                    if sim_results.empty:
+                        sim_results = batch_df
+                    else:
+                        sim_results = pd.concat(
+                            [sim_results, batch_df], ignore_index=True)
+
+                    sims_run.update(batch_df['sim_id'].values)
+
+            print(
+                f"Batch {batch_idx + 1} processed. Total simulations: {len(
+                    sim_results)}")
+
+            # Save interim results
+            if (batch_idx + 1) % 5 == 0:
+                os.makedirs(os.path.dirname(results_path), exist_ok=True)
+                sim_results.to_csv(results_path, index=False)
+                print(f"Interim save to {results_path}")
+                
+        # Final save
+        os.makedirs(os.path.dirname(results_path), exist_ok=True)
+        sim_results.to_csv(results_path, index=False)
+        print(f"Simulation {analysis_name} complete.")

@@ -4,9 +4,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 
-# Configuration
-RESULTS_PATH = "results/probabilistic/results.csv"
-OUTPUT_DIR = "figures/program/"
 # The primary scalar metrics calculated in calculate_results
 METRICS_TO_PLOT = [
     'p_int_given_signal',
@@ -51,7 +48,7 @@ def calculate_stats(df, group_cols, metric):
     return stats
 
 
-def plot_program_metrics(program_name, program_data):
+def plot_program_metrics(program_name: str, program_data: pd.DataFrame, output_base_dir: str):
     """
     Generates a 2x3 panel of plots for a single program.
     """
@@ -99,22 +96,22 @@ def plot_program_metrics(program_name, program_data):
 
     # Save file
     filename = f"{program_name.replace(' ', '_').lower()}_metrics.png"
-    save_path = os.path.join(OUTPUT_DIR, filename)
+    save_path = os.path.join(output_base_dir, filename)
     plt.savefig(save_path, dpi=300)
     plt.close()
     print(f"Saved figure: {save_path}")
 
 
-def main():
+def create_program_graphs_for_analysis(results_filepath: str, output_base_dir: str):
     # 1. Setup Directories
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
-        print(f"Created directory: {OUTPUT_DIR}")
+    if not os.path.exists(output_base_dir):
+        os.makedirs(output_base_dir)
+        print(f"Created directory: {output_base_dir}")
 
     # 2. Load Data
     try:
-        df = load_data(RESULTS_PATH)
-        print(f"Loaded data with {len(df)} rows.")
+        df = load_data(results_filepath)
+        print(f"Loaded data with {len(df)} rows from {results_filepath}.")
     except Exception as e:
         print(e)
         return
@@ -127,12 +124,19 @@ def main():
     for program in programs:
         print(f"Processing program: {program}")
         program_data = df[df['program'] == program]
-        plot_program_metrics(program, program_data)
+        plot_program_metrics(program, program_data, output_base_dir)
 
-    print("All plots generated successfully.")
+    print(f"All plots generated successfully for {results_filepath}.")
+
+
+def main():
+    # Set style for better looking plots
+    sns.set_theme(style="whitegrid")
+    # Default analysis if run directly
+    RESULTS_PATH = "results/results_base.csv" # Updated default results path
+    OUTPUT_DIR = "figures/base/" # Default output dir
+    create_program_graphs_for_analysis(RESULTS_PATH, OUTPUT_DIR)
 
 
 if __name__ == "__main__":
-    # Set style for better looking plots
-    sns.set_theme(style="whitegrid")
     main()

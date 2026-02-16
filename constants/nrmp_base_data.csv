@@ -1,7 +1,7 @@
 Program,n_programs,n_positions,n_applicants
-Anesthesiology,189,1805,3017
-Child Neurology,78,195,286
-Dermatology,14,30,299
+Anesthesiology,241,2116,5108
+Child Neurology,83,203,350
+Dermatology,162,554,1292
 Emergency Medicine,292,3068,3753
 Family Medicine,817,5357,7337
 Internal Medicine (Categorical),758,10941,17131
@@ -9,21 +9,27 @@ Medicine-Emergency Med,13,34,110
 Medicine-Pediatrics,79,398,599
 Medicine-Preliminary (PGY-1 Only),329,1600,5964
 Medicine-Primary,91,411,2134
-Interventional Radiology (Integrated),27,52,299
+Interventional Radiology (Integrated),98,202,680
 Neurological Surgery,121,268,476
-Neurology,159,932,1776
+Neurology,196,1160,2819
 Obstetrics-Gynecology,295,1587,2151
 Orthopaedic Surgery,216,929,1590
 Otolaryngology,139,394,552
 Pathology,175,622,1018
 Pediatrics (Categorical),250,3135,3998
 Pediatrics-Primary,12,58,601
-Physical Medicine & Rehab,55,240,782
+Physical Medicine & Rehab,124,574,1606
 Plastic Surgery (Integrated),91,221,396
 Psychiatry,404,2388,3278
-Radiology-Diagnostic,35,151,1108
+Radiology-Diagnostic,204,1208,2867
 Surgery (Categorical),377,1778,3305
 Surgery-Preliminary (PGY-1 Only),261,1194,2229
 Thoracic Surgery,40,54,130
 Transitional (PGY-1 Only),236,1860,5172
 Vascular Surgery,77,102,172
+Neurodevelopmental Disabilities,2,2,15
+Nuclear Medicine,2,4,13
+Occupational & Environmental Med,4,5,22
+Public Health and Preventive Medicine,5,7,25
+Radiation Oncology,81,179,240
+Radiology-Nuclear Med,2,2,19

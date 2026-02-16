@@ -17,3 +17,4 @@ signaling/
 .DS_Store
 GEMINI.md
 *.venv
+tests/
