@@ -9,9 +9,14 @@ SETS_PER_SIGNAL_PER_SCENARIO = 50
 SEED = 7
 np.random.seed(SEED)
 
+OUTPUT_DIRECTORY = "constants/gamma_72/"
+
+# NOTE: STANDARD CASE IS GAMMA SHAPE 40 SCALE 72/40
+# will also test mean 30, shape 10
+
 # gamma distribution parameters
-GAMMA_SHAPE_APPLICATIONS = 40
-GAMMA_SCALE_APPLICATIONS = 72/40
+GAMMA_SHAPE_APPLICATIONS = 10
+GAMMA_SCALE_APPLICATIONS = 30/GAMMA_SHAPE_APPLICATIONS
 GAMMA_SHAPE_INTERVIEWS_PER_POSITION = 8
 GAMMA_SCALE_INTERVIEWS_PER_POSITION = 12/8
 
@@ -69,4 +74,4 @@ for program in nrmp_dict:
 # parquet used so we don't need to convert data types to store lists, and 
 # easiet to load line by line
 df_final = pd.DataFrame(final_sets)
-df_final.to_parquet('constants.parquet', index=False, engine='pyarrow')
+df_final.to_parquet(OUTPUT_DIRECTORY + 'constants.parquet', index=False, engine='pyarrow')

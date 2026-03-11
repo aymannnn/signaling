@@ -14,6 +14,9 @@ import probabilistic_simulation_helpers as helpers
 from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 
+CONSTANTS_DIRECTORY= "constants/gamma_72/"
+OUTPUT_DIRECTORY = "results/model_output/gamma_72/"
+
 # can modify here to leave whatever number of cores free
 CORES_TO_USE = max(1, os.cpu_count()-4)
 
@@ -620,7 +623,7 @@ if __name__ == "__main__":
         
         analysis_name = variation_row['analysis_name']
         
-        results_path = f"results/results_{analysis_name}.csv"
+        results_path = OUTPUT_DIRECTORY + f"results_{analysis_name}.csv"
         sim_results = read_run_simulations(
             RESULTS_PATH=results_path,
             WIPE_DATA=False)
@@ -630,7 +633,7 @@ if __name__ == "__main__":
         variation_settings = variation_row.to_dict()
         print(f"Running analysis: {variation_settings['analysis_name']}. Already ran simulations: {len(sims_run)}")
 
-        simulation_constants = pq.ParquetFile("constants/constants.parquet")
+        simulation_constants = pq.ParquetFile(CONSTANTS_DIRECTORY + "constants.parquet")
         
         BATCH_SIZE = 100
 

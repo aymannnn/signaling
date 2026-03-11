@@ -4,10 +4,10 @@ from individual_graphs import create_program_graphs_for_analysis
 from combined_graphs import plot_combined_scenario_graphs, plot_dual_axis_program_graphs
 from decile_graphs import generate_all_decile_graphs
 
-GRAPH_INDIVIDUAL_ANALYSES = False
-GRAPH_COMBINED_SCENARIOS = False
-GRAPH_DUAL_AXIS_PROGRAMS = False
-GRAPH_DECILE_PLOTS = True
+GRAPH_INDIVIDUAL_ANALYSES = True
+GRAPH_COMBINED_SCENARIOS = True
+GRAPH_DUAL_AXIS_PROGRAMS = True
+GRAPH_DECILE_PLOTS = False
 
 DUAL_AXIS_PROGRAMS = [
     "Surgery (Categorical)",

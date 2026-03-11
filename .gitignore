@@ -5,7 +5,7 @@
 __pycache__/
 .gemini/
 *.parquet
-results/
+results/model_output/
 figures/
 machine_learning_model/
 signaling/
@@ -15,6 +15,7 @@ signaling/
 *~
 *.swp
 .DS_Store
-GEMINI.md
 *.venv
 tests/
+.geminiignore
+.pytest_cache/
