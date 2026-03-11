@@ -1,0 +1,35 @@
+program,Optimal Signals (Max Exp Int) - base,Optimal Signals (Min Reviews) - base,Optimal Signals (Max Exp Int) - random_distribution,Optimal Signals (Min Reviews) - random_distribution,Optimal Signals (Max Exp Int) - random_applicant_rank_list,Optimal Signals (Min Reviews) - random_applicant_rank_list,Optimal Signals (Max Exp Int) - random_program_rank_list,Optimal Signals (Min Reviews) - random_program_rank_list,Optimal Signals (Max Exp Int) - random_all,Optimal Signals (Min Reviews) - random_all
+Anesthesiology,29,10,29,10,29,10,29,10,29,10
+Child Neurology,15,13,15,13,15,14,15,13,15,14
+Dermatology,10,10,10,11,10,10,10,11,10,11
+Emergency Medicine,26,16,26,16,26,16,26,16,26,16
+Family Medicine,24,16,24,16,24,16,24,16,24,16
+Internal Medicine (Categorical),17,13,17,13,17,13,17,13,17,13
+Interventional Radiology (Integrated),11,8,7,8,7,8,7,8,11,8
+Medicine-Emergency Med,10,5,7,5,10,5,10,5,7,5
+Medicine-Pediatrics,23,14,23,14,23,14,23,14,23,14
+Medicine-Preliminary (PGY-1 Only),18,7,18,7,18,7,18,7,18,7
+Medicine-Primary,8,5,8,5,8,5,8,5,8,5
+Neurodevelopmental Disabilities,2,1,2,1,2,1,2,1,2,1
+Neurological Surgery,19,12,19,12,19,12,19,12,19,12
+Neurology,28,10,28,10,28,10,28,10,28,10
+Nuclear Medicine,2,2,2,2,2,2,2,2,2,2
+Obstetrics-Gynecology,24,15,25,15,24,15,25,15,25,15
+Occupational & Environmental Med,4,2,4,2,4,2,4,2,4,2
+Orthopaedic Surgery,23,13,23,13,23,13,23,13,23,13
+Otolaryngology,27,15,27,15,27,15,27,15,27,15
+Pathology,21,13,21,13,21,14,30,13,21,14
+Pediatrics (Categorical),21,16,21,16,21,16,21,16,21,16
+Pediatrics-Primary,12,2,12,2,12,2,12,2,12,2
+Physical Medicine & Rehab,27,9,27,9,27,9,27,9,27,9
+Plastic Surgery (Integrated),13,13,13,13,23,13,13,13,25,13
+Psychiatry,29,15,29,15,29,15,29,15,29,15
+Public Health and Preventive Medicine,5,3,5,3,5,3,5,3,5,3
+Radiation Oncology,22,16,22,16,22,16,25,16,22,16
+Radiology-Diagnostic,14,10,14,10,14,10,14,10,14,10
+Radiology-Nuclear Med,2,1,2,1,2,1,2,1,2,1
+Surgery (Categorical),27,12,27,12,27,12,27,12,27,12
+Surgery-Preliminary (PGY-1 Only),13,12,13,12,13,12,13,12,13,12
+Thoracic Surgery,14,10,14,9,14,9,14,10,14,10
+Transitional (PGY-1 Only),14,9,14,9,14,9,14,9,14,9
+Vascular Surgery,24,13,24,13,24,13,24,13,24,13
