@@ -7,8 +7,8 @@ import os
 # --- Configuration ---
 
 # File paths as requested
-IMPORT_PATH = "results/calculated/gamma_30/"
-EXPORT_PATH = "figures/gamma_30/"
+IMPORT_PATH = "results/calculated/gamma_72/"
+EXPORT_PATH = "figures/gamma_72/"
 
 # Sensitivity analyses to include
 ANALYSES = [
@@ -198,7 +198,7 @@ def main():
     plt.subplots_adjust(top=0.88, wspace=0.05)
 
     # Save Figure
-    save_path = EXPORT_PATH + "residual_analysis_vertical.png"
+    save_path = EXPORT_PATH + "residual_analysis_vertical.pdf"
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
     print(f"\nSaved graph successfully to: {save_path}")
 

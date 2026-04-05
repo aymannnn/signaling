@@ -8,15 +8,16 @@ import os
 
 # --- Configuration ---
 
-INPUT_DIRECTORY = "results/calculated/gamma_30/"
-OUTPUT_DIRECTORY = "figures/gamma_30/"
+INPUT_DIRECTORY = "results/calculated/gamma_72/"
+OUTPUT_DIRECTORY = "figures/gamma_72/"
 
-# The 4 analyses you want to graph. These should match the CSV filenames (without .csv)
+# The 5 analyses you want to graph. These should match the CSV filenames (without .csv)
 ANALYSES_TO_GRAPH = [
     "base",
     "random_distribution",
     "random_applicant_rank_list",
-    "random_program_rank_list"
+    "random_program_rank_list",
+    "random_all"
 ]
 
 PROGRAMS_TO_GRAPH = [
@@ -53,6 +54,87 @@ METRIC_STYLES_A = {
 }
 
 
+def create_decile_6_panel_graph(data_dict, program_name, decile_signal):
+    """
+    Generates a 6-panel (2x3) chart showing decile match heatmaps for all 5 analyses.
+    The 6th position (1, 2) displays the chart title.
+    """
+    fig = plt.figure(figsize=(24, 16))
+    gs = gridspec.GridSpec(2, 3, figure=fig)
+
+    # Positions for the 5 analyses: (0,0), (0,1), (0,2), (1,0), (1,1)
+    # Position (1,2) is reserved for the title as requested by user.
+    # Wait, user said "place it in the top middle plot position (1, 2)". 
+    # In 2x3 grid, (1, 2) is bottom right in 0-indexing? 
+    # Top middle is (0, 1). 
+    # Let's re-read: "place it in the top middle plot position (1, 2)".
+    # Maybe user means 1-indexed? (1, 2) would be top row, middle column.
+    # I will assume 1-indexed (1, 2) which is top middle.
+    
+    # 0-indexed mapping:
+    # (0,0) (0,1) (0,2)
+    # (1,0) (1,1) (1,2)
+    
+    # User said "(1, 2)" and "top middle". 
+    # If it's (row, col) and 1-indexed: 1st row, 2nd col is top middle.
+    # So 0-indexed that is (0, 1).
+    
+    plot_positions = [(0, 0), (0, 2), (1, 0), (1, 1), (1, 2)]
+    title_position = (0, 1)
+
+    # Title panel
+    ax_title = fig.add_subplot(gs[title_position[0], title_position[1]])
+    ax_title.axis('off')
+    ax_title.text(0.5, 0.5, f"Decile Match Heatmaps\n{program_name}\nSignal = {decile_signal}", 
+                  fontsize=24, fontweight='bold', ha='center', va='center')
+
+    for i, analysis in enumerate(ANALYSES_TO_GRAPH):
+        row, col = plot_positions[i]
+        ax = fig.add_subplot(gs[row, col])
+        
+        if analysis in data_dict:
+            prog_df = data_dict[analysis][data_dict[analysis]['program'] == program_name]
+            point_data = prog_df[prog_df['signals'] == decile_signal]
+
+            if point_data.empty:
+                ax.text(0.5, 0.5, f"No data for {analysis}\nat signals = {decile_signal}", 
+                        ha='center', va='center')
+                ax.set_title(f"Analysis: {analysis}", fontsize=14)
+            else:
+                decile_matrix = np.zeros((10, 10))
+                for p in range(1, 11):
+                    for a in range(1, 11):
+                        col_name = f'p{p}_a{a}'
+                        if col_name in point_data.columns:
+                            decile_matrix[p-1, a-1] = point_data.iloc[0][col_name]
+
+                sns.heatmap(decile_matrix, ax=ax, cmap="YlGnBu", annot=False, square=True,
+                            vmin=0, cbar_kws={'label': 'Match Probability', 'shrink': 0.8} if i == 0 else {})
+
+                ax.set_title(f"Analysis: {analysis}", fontsize=16, fontweight='bold')
+                ax.set_xticks(np.arange(10) + 0.5)
+                ax.set_xticklabels(range(1, 11))
+                ax.set_yticks(np.arange(10) + 0.5)
+                ax.set_yticklabels(range(1, 11))
+                ax.set_xlabel("Applicant Decile")
+                ax.set_ylabel("Program Decile")
+        else:
+            ax.text(0.5, 0.5, f"Analysis '{analysis}'\nnot found", ha='center', va='center')
+
+    plt.tight_layout()
+    
+    clean_prog_name = program_name.replace(' ', '_').replace('(', '').replace(')', '')
+    filename = f"decile_6panel_{clean_prog_name}_{decile_signal}.pdf"
+    save_path = os.path.join(OUTPUT_DIRECTORY, filename)
+    
+    if not os.path.exists(OUTPUT_DIRECTORY):
+        os.makedirs(OUTPUT_DIRECTORY)
+
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"Saved 6-panel decile graph: {save_path}")
+    plt.close(fig)
+
+
 def create_4_panel_graph(data_dict, program_name, decile_signal):
     """
     Generates and saves a 4-panel figure comparing multiple analyses for a specific program.
@@ -79,7 +161,7 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
     # ---------------------------------------------------------
     # Panel A: Probabilities/Percentages (Interview & Match)
     # ---------------------------------------------------------
-    for i, analysis in enumerate(ANALYSES_TO_GRAPH):
+    for i, analysis in reversed(list(enumerate(ANALYSES_TO_GRAPH))):
         if analysis not in data_dict:
             continue
         prog_df = data_dict[analysis][data_dict[analysis]
@@ -113,7 +195,7 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
     # Panel B: Unfilled Positions
     # ---------------------------------------------------------
     metric_b = 'unfilled_positions_mean'
-    for i, analysis in enumerate(ANALYSES_TO_GRAPH):
+    for i, analysis in reversed(list(enumerate(ANALYSES_TO_GRAPH))):
         if analysis not in data_dict:
             continue
         prog_df = data_dict[analysis][data_dict[analysis]
@@ -143,7 +225,7 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
     metric_c1 = 'reviews_per_program_mean'
     metric_c2 = 'expect_int_per_signal_mean'
 
-    for i, analysis in enumerate(ANALYSES_TO_GRAPH):
+    for i, analysis in reversed(list(enumerate(ANALYSES_TO_GRAPH))):
         if analysis not in data_dict:
             continue
         prog_df = data_dict[analysis][data_dict[analysis]
@@ -172,9 +254,9 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
         Line2D([0], [0], color='black', linestyle='--',
                marker='v', label=METRIC_NAMES[metric_c2])
     ]
-    ax_c1.legend(handles=c_style_elements, loc='upper left', title="Metrics")
-    ax_c2.legend(handles=analysis_legend_elements,
-                 loc='upper right', title="Analyses")
+    ax_c1.legend(handles=analysis_legend_elements,
+                 loc='upper left', title="Analyses")
+    ax_c2.legend(handles=c_style_elements, loc='upper right', title="Metrics")
 
     # ---------------------------------------------------------
     # Panel D: Decile Match Matrix (Base Analysis Only)
@@ -197,7 +279,7 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
                     if col_name in point_data.columns:
                         decile_matrix[p-1, a-1] = point_data.iloc[0][col_name]
 
-            sns.heatmap(decile_matrix, ax=ax_d, cmap="YlGnBu", annot=False,
+            sns.heatmap(decile_matrix, ax=ax_d, cmap="YlGnBu", annot=False, square=True,
                         vmin=0, cbar_kws={'label': 'Match Probability'})
 
             # Format heatmap axes to show 1-10 cleanly
@@ -218,7 +300,7 @@ def create_4_panel_graph(data_dict, program_name, decile_signal):
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     clean_prog_name = program_name.replace(' ', '_')
-    filename = f"{clean_prog_name}_{decile_signal}.png"
+    filename = f"{clean_prog_name}_{decile_signal}.pdf"
     save_path = os.path.join(OUTPUT_DIRECTORY, filename)
 
     if not os.path.exists(OUTPUT_DIRECTORY):
@@ -250,6 +332,8 @@ def main():
         print(
             f"Generating panels for: {program_name} (Decile Signal: {decile_signal})")
         create_4_panel_graph(data_dict, program_name, decile_signal)
+        # Add the new 6-panel decile graph
+        create_decile_6_panel_graph(data_dict, program_name, decile_signal)
 
     print("All multi-analysis graphs successfully processed and saved!")
 
