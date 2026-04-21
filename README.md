@@ -1,6 +1,9 @@
 # Medical Residency Match Simulation
 
-This project is a Python-based simulation designed to analyze the medical residency matching process, with a specific focus on the impact of "signals" on match outcomes. It uses data from the National Resident Matching Program (NRMP) to model the behavior of applicants and programs. The simulation explores various scenarios and parameters to understand their effects on key metrics like the number of applications, match rates, and unfilled positions.
+This project is a Python-based simulation designed to analyze the medical residency matching process, with a specific focus on the impact of "signals" on match outcomes. It uses data from the National Resident Matching Program (NRMP) to model the behavior of applicants and programs. The simulation explores various scenarios and parameters to understand their effects on key metrics like the number of applications, match rates, and unfilled positions. This study is currently under review.
+
+Title: A Computation Approach to Residency Match Preference Signaling: Balancing Benefit for Programs and Applicants
+
 
 # Getting Started
 
@@ -61,8 +64,10 @@ This script reads the raw CSVs from `results/model_output/`, calculates 95% conf
 
 The project includes two primary scripts for visualizing the results:
 
-1.  **`panel_graphs.py`**: Generates a 4-panel figure for specific programs (e.g., Anesthesiology, General Surgery). These panels compare different analysis scenarios across metrics like interview rates, unfilled positions, and workload.
+1.  **`panel_graphs.py`**: Generates a 4-panel figure for specific programs (e.g., Anesthesiology, General Surgery). These panels compare different analysis scenarios across metrics like interview rates, unfilled positions, and workload. This will also generate 6-panel decile graphs.
 2.  **`residual_graphs.py`**: Generates a "residual analysis" plot that looks at the distance between optimal signal values across all specialties.
+
+You may specify within each python file what programs to graph and the input/output directories.
 
 To generate the figures, run:
 
@@ -122,3 +127,7 @@ The simulation operates through the following steps:
 - Applicants and programs generally prefer higher-ranked counterparts (quartile-based preference).
 - Signals act as a "tie-breaker" or priority filter for programs when selecting whom to interview and rank.
 - The simulation models the "Match" as a stable marriage problem, which is the mathematical foundation of the real NRMP algorithm.
+
+# Disclaimers
+
+Artificial intelligence was used to assist with graphing functionality and minor code-block completion. No AI-based tools were used for study design nor the implementation of the main probabilistic_simulation.py file. See manuscript for full model details. 
